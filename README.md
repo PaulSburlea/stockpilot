@@ -1,153 +1,153 @@
 # StockPilot 📦
 
-## 🧠 About the Project
-
-StockPilot is a full-stack inventory and sales management system built as a collaborative technical project. The application demonstrates modern frontend and backend architecture, cloud database integration, and role-based access control.
----
-
-## 📋 Cuprins
-
-- [Tehnologii](#tehnologii)
-- [Structura Proiectului](#structura-proiectului)
-- [Funcționalități](#funcționalități)
-- [Cerințe Sistem](#cerințe-sistem)
-- [Instalare și Configurare](#instalare-și-configurare)
-- [Pornirea Aplicației](#pornirea-aplicației)
-- [Configurare Bază de Date](#configurare-bază-de-date)
-- [Instrucțiuni pentru Coleg](#instrucțiuni-pentru-coleg)
+> A full-stack inventory and sales management platform with AI-powered restocking suggestions, role-based access control, and real-time analytics.
 
 ---
 
-## 🚀 Tehnologii
+## Table of Contents
+
+- [Overview](#overview)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
+- [Running the Application](#running-the-application)
+- [Database Setup](#database-setup)
+- [Contributing](#contributing)
+- [Team](#team)
+
+---
+
+## Overview
+
+StockPilot is a full-stack inventory and sales management system designed for multi-location retail networks. It provides warehouse managers and stand operators with real-time stock visibility, AI-driven reorder suggestions, sales forecasting, and a complete audit trail — all through a clean, role-aware interface.
+
+---
+
+## Tech Stack
 
 ### Frontend
-- **React 19.2.0** - Framework UI
-- **TypeScript** - Tipizare statică
-- **Vite 7.3** - Build tool rapid
-- **Tailwind CSS 4.2** - Styling
-- **React Router DOM 7** - Routing
-- **TanStack Query** - Server state management
-- **Recharts** - Grafice interactive
-- **Leaflet** - Hărți interactive
+| Technology | Version | Purpose |
+|---|---|---|
+| React | 19.2.0 | UI framework |
+| TypeScript | — | Static typing |
+| Vite | 7.3 | Build tool |
+| Tailwind CSS | 4.2 | Styling |
+| React Router DOM | 7 | Client-side routing |
+| TanStack Query | — | Server state management |
+| Recharts | — | Interactive charts |
+| Leaflet | — | Interactive maps |
 
 ### Backend
-- **Node.js** - Runtime JavaScript
-- **Express 5.2** - Framework API
-- **Supabase** - Bază de date PostgreSQL
-- **JWT** - Autentificare securizată
-- **bcrypt** - Criptare parole
+| Technology | Purpose |
+|---|---|
+| Node.js | JavaScript runtime |
+| Express 5.2 | REST API framework |
+| Supabase | PostgreSQL cloud database |
+| JWT | Stateless authentication |
+| bcrypt | Password hashing |
 
 ---
 
-## 📁 Structura Proiectului
+## Project Structure
 
 ```
 stockpilot/
-├── stockpilot-frontend/          # Aplicația React
+├── stockpilot-frontend/
 │   ├── src/
-│   │   ├── components/          # Componente reutilizabile
-│   │   ├── context/            # Contexte React (Auth, Notifications)
-│   │   ├── hooks/              # Custom hooks
-│   │   ├── pages/              # Pagini aplicație
-│   │   └── main.tsx            # Entry point
-│   ├── .env                    # Variabile environment frontend
+│   │   ├── components/        # Reusable UI components
+│   │   ├── context/           # React contexts (Auth, Notifications)
+│   │   ├── hooks/             # Custom hooks
+│   │   ├── pages/             # Application pages
+│   │   └── main.tsx           # Entry point
+│   ├── .env.example
 │   └── package.json
 │
-└── stockpilot-backend/           # API Express
-    ├── src/
-    │   ├── config/             # Configurări (Supabase)
-    │   ├── middleware/         # Middleware (autentificare)
-    │   ├── routes/             # Endpoint-uri API
-    │   ├── services/           # Logică de business
-    │   └── index.js            # Entry point server
-    ├── .env                    # Variabile environment backend
-    └── package.json
+├── stockpilot-backend/
+│   ├── src/
+│   │   ├── config/            # Supabase and app configuration
+│   │   ├── middleware/        # Authentication & authorization
+│   │   ├── routes/            # API route handlers
+│   │   ├── services/          # Business logic
+│   │   └── index.js           # Server entry point
+│   ├── .env.example
+│   └── package.json
+│
+├── README.md
+└── .gitignore
 ```
 
 ---
 
-## ✨ Funcționalități
+## Features
 
-### Toți Utilizatorii
-- 📊 **Dashboard** - Vedere de ansamblu asupra stocurilor și vânzărilor
-- 📦 **Gestionare Stoc** - Vizualizare și filtrare produse
-- 🔄 **Mișcări Stoc** - Istoric complet al intrărilor/ieșirilor
-- 💰 **Vânzări** - Istoric vânzări cu grafice
-- 📍 **Locații** - Management locații depozit
-- 🗺️ **Harta Stocului** - Vizualizare geografică
-- 📤 **Export** - Export date în diverse formate
+### All Roles
+- 📊 **Dashboard** — Real-time overview of stock levels and sales performance
+- 📦 **Stock Management** — Browse, filter, and monitor inventory across locations
+- 🔄 **Stock Movements** — Full history of transfers, orders, and adjustments
+- 💰 **Sales** — Sales history with interactive charts and filters
+- 📍 **Locations** — Manage warehouse and stand locations
+- 🗺️ **Network Map** — Geographic visualization of stock distribution
+- 📤 **Export** — Export reports in multiple formats
 
 ### Admin & Warehouse Manager
-- ➕ **Produse** - Adăugare/editare produse
-- 💡 **Sugestii** - Recomandări inteligente de aprovizionare
-- 📈 **Prognoze** - Predicții bazate pe istoric
-- ⚖️ **Comparație Costuri** - Analiză furnizori
-- ⚙️ **Setări** - Configurare aplicație
+- ➕ **Products** — Add and edit product catalog
+- 💡 **AI Suggestions** — Intelligent restocking recommendations
+- 📈 **Forecasting** — Demand predictions based on sales history
+- ⚖️ **Cost Comparison** — Supplier and transport cost analysis
+- ⚙️ **Settings** — Location and system configuration
 
-### Doar Admin
-- 👥 **Utilizatori** - Management utilizatori și roluri
-- 📝 **Audit Log** - Istoric complet al acțiunilor
-
----
-
-## 💻 Cerințe Sistem
-
-### Necesar
-- **Node.js** - v18.0 sau mai nou
-- **npm** - v9.0 sau mai nou (vine cu Node.js)
-- **Git** - Pentru clonarea proiectului
-
-### Cont Supabase
-- Crează un cont gratuit pe [supabase.com](https://supabase.com)
-- Creează un nou proiect
-- Notează `Project URL`, `Publishable key/Secret key` din Settings → API
+### Admin Only
+- 👥 **User Management** — Create and manage users and roles
+- 📝 **Audit Log** — Complete history of all system actions
 
 ---
 
-## 🔧 Instalare și Configurare
+## Prerequisites
 
-### 1. Clonează Proiectul
+- **Node.js** v18.0 or higher
+- **npm** v9.0 or higher
+- **Git**
+- A [Supabase](https://supabase.com) account with an active project
+
+---
+
+## Getting Started
+
+### 1. Clone the Repository
 
 ```bash
-git clone <URL-REPO-ULUI> stockpilot
+git clone https://github.com/PaulSburlea/stockpilot
 cd stockpilot
 ```
 
-### 2. Instalare Backend
+### 2. Set Up the Backend
 
 ```bash
 cd stockpilot-backend
 npm install
+cp .env.example .env
 ```
 
-### 3. Configurare Backend
-
-Creează fișierul `.env` în `stockpilot-backend/`:
+Edit `.env` with your credentials:
 
 ```env
-# Supabase Configuration
-SUPABASE_URL=https://tmtwmbunjxqvewdoozwo.supabase.co
-SUPABASE_SECRET_KEY=cheia-ta-secretă-de-la-supabase
-
-# Server Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-secret-key
+JWT_SECRET=your-jwt-secret
 PORT=3000
-
-# JWT Secret
-JWT_SECRET=secret-key-pentru-jwt
 ```
 
-> **Notă:** Fișierul `.env.example` conține un template. Copiază-l și redenumește-l în `.env`, apoi completează valorile.
-
-### 4. Instalare Frontend
+### 3. Set Up the Frontend
 
 ```bash
 cd ../stockpilot-frontend
 npm install
+cp .env.example .env
 ```
 
-### 5. Configurare Frontend
-
-Creează fișierul `.env` în `stockpilot-frontend/`:
+Edit `.env`:
 
 ```env
 VITE_API_URL=http://localhost:3000/api
@@ -155,97 +155,64 @@ VITE_API_URL=http://localhost:3000/api
 
 ---
 
-## ▶️ Pornirea Aplicației
+## Running the Application
 
-### Mod Dezvoltare
+Open two separate terminal windows:
 
-Deschide **două terminale separate**:
-
-**Terminal 1 - Backend:**
+**Terminal 1 — Backend:**
 ```bash
 cd stockpilot-backend
 npm run dev
+# Server running at http://localhost:3000
 ```
-Serverul va porni pe `http://localhost:3000`
 
-**Terminal 2 - Frontend:**
+**Terminal 2 — Frontend:**
 ```bash
 cd stockpilot-frontend
 npm run dev
-```
-Frontendul va porni pe `http://localhost:5173`
-
-Accesează `http://localhost:5173` în browser.
-
-### Mod Producție
-
-**Backend:**
-```bash
-cd stockpilot-backend
-npm run build
-npm start
+# App running at http://localhost:5173
 ```
 
-**Frontend:**
-```bash
-cd stockpilot-frontend
-npm run build
-npm run preview
-```
+Navigate to `http://localhost:5173` in your browser.
 
----
-
-## 👥 Instrucțiuni pentru Coleg
-
-### Pasul 1: Clonează Proiectul
-
-```bash
-git clone <URL-UL-GIT-REPO> stockpilot
-cd stockpilot
-```
-
-### Pasul 2: Instalare Dependențe
+### Production Build
 
 ```bash
 # Backend
-cd stockpilot-backend
-npm install
+cd stockpilot-backend && npm run build && npm start
 
 # Frontend
-cd ../stockpilot-frontend
-npm install
+cd stockpilot-frontend && npm run build && npm run preview
 ```
 
-### Pasul 3: Configurare Environment
+## Contributing
 
-1. Copiază `.env.example` → `.env` în ambele foldere
-2. Completează valorile necesare:
-   - **Backend**: URL și cheie Supabase
-   - **Frontend**: URL către backend (de obicei `http://localhost:3000/api`)
+1. Make sure you have received the `.env` values from a team member — **never commit secrets to the repository**
+2. Always pull the latest changes before starting work:
+   ```bash
+   git pull origin main
+   ```
+3. Create a feature branch for your changes:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+4. Commit with clear, descriptive messages:
+   ```bash
+   git commit -m "feat: add stock movement filter by date range"
+   ```
+5. Open a pull request when ready for review
 
-### Pasul 4: Rulează Aplicația
+### Common Issues
 
-```bash
-# Terminal 1
-cd stockpilot-backend
-npm run dev
-
-# Terminal 2
-cd stockpilot-frontend
-npm run dev
-```
-
-### Troubleshooting Comun
-
-| Problemă | Soluție |
-|----------|---------|
-| `EADDRINUSE` pe port 3000 | Schimbă `PORT` în `.env` sau oprește procesul care folosește portul |
-| `Connection refused` | Verifică că backend-ul rulează și URL-ul în `.env` este corect |
-| `Supabase error` | Verifică credențialele în `.env` și că proiectul Supabase este activ |
+| Issue | Solution |
+|---|---|
+| `EADDRINUSE` on port 3000 | Change `PORT` in `.env` or kill the process using that port |
+| `Connection refused` on API calls | Ensure the backend is running and `VITE_API_URL` is correct |
+| Supabase errors | Double-check credentials in `.env` and verify your Supabase project is active |
 
 ---
 
-## 👨‍💻 Team
+## Team
 
-- Paul Sburlea
-- Daniel Vișa
+- [Paul Sburlea](https://github.com/PaulSburlea)
+- [Daniel Vișa](https://github.com/visa-daniel-30123)
