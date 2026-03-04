@@ -20,6 +20,28 @@ function toCSV(data, columns) {
   return [header, ...rows].join('\n')
 }
 
+// Helper — sanitizează părțile din numele fișierului (fără diacritice / spații)
+function sanitizeFilenamePart(str) {
+  return String(str)
+    .normalize('NFD')                    // separă diacriticele
+    .replace(/[\u0300-\u036f]/g, '')     // scoate diacriticele
+    .replace(/[^a-zA-Z0-9_-]/g, '_')     // orice altceva -> _
+    .toLowerCase()
+}
+
+// Helper — determină eticheta de scope (oraș sau "general"), nesanitizată
+async function getScopeLabel(locationId) {
+  if (!locationId) return 'general'
+
+  const { data: location } = await supabase
+    .from('locations')
+    .select('city')
+    .eq('id', locationId)
+    .single()
+
+  return location?.city || 'general'
+}
+
 // GET /api/export/stock?location_id=2
 router.get('/stock', async (req, res) => {
   const { location_id } = req.query
@@ -33,6 +55,10 @@ router.get('/stock', async (req, res) => {
 
   const { data, error } = await query
   if (error) return res.status(500).json({ error: error.message })
+
+  const dateStr = new Date().toISOString().split('T')[0]
+  const scopeRaw = await getScopeLabel(location_id ? Number(location_id) : null)
+  const scopeLabel = sanitizeFilenamePart(scopeRaw)
 
   const csv = toCSV(data, [
     { label: 'Locatie',       getValue: r => r.locations?.name },
@@ -56,7 +82,10 @@ router.get('/stock', async (req, res) => {
   ])
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', `attachment; filename="stocuri_${new Date().toISOString().split('T')[0]}.csv"`)
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="stocuri_${dateStr}_${scopeLabel}.csv"`
+  )
   res.send('\uFEFF' + csv) // BOM pentru Excel
 })
 
@@ -76,6 +105,10 @@ router.get('/sales', async (req, res) => {
   const { data, error } = await query
   if (error) return res.status(500).json({ error: error.message })
 
+  const dateStr = new Date().toISOString().split('T')[0]
+  const scopeRaw = await getScopeLabel(location_id ? Number(location_id) : null)
+  const scopeLabel = sanitizeFilenamePart(scopeRaw)
+
   const csv = toCSV(data, [
     { label: 'Data',          getValue: r => new Date(r.sold_at).toLocaleString('ro-RO') },
     { label: 'Locatie',       getValue: r => r.locations?.name },
@@ -89,7 +122,10 @@ router.get('/sales', async (req, res) => {
   ])
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', `attachment; filename="vanzari_${days}zile_${new Date().toISOString().split('T')[0]}.csv"`)
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="vanzari_${days}zile_${dateStr}_${scopeLabel}.csv"`
+  )
   res.send('\uFEFF' + csv)
 })
 
@@ -122,7 +158,10 @@ router.get('/movements', async (req, res) => {
   ])
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', `attachment; filename="miscari_stoc_${new Date().toISOString().split('T')[0]}.csv"`)
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="miscari_stoc_${new Date().toISOString().split('T')[0]}_general.csv"`
+  )
   res.send('\uFEFF' + csv)
 })
 
@@ -174,6 +213,10 @@ router.get('/summary', async (req, res) => {
     }
   })
 
+  const dateStr = new Date().toISOString().split('T')[0]
+  const scopeRaw = await getScopeLabel(location_id ? Number(location_id) : null)
+  const scopeLabel = sanitizeFilenamePart(scopeRaw)
+
   const csv = toCSV(rows, [
     { label: 'Locatie',           getValue: r => r.locations?.name },
     { label: 'Oras',              getValue: r => r.locations?.city },
@@ -190,7 +233,10 @@ router.get('/summary', async (req, res) => {
   ])
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', `attachment; filename="raport_complet_${new Date().toISOString().split('T')[0]}.csv"`)
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="raport_complet_${dateStr}_${scopeLabel}.csv"`
+  )
   res.send('\uFEFF' + csv)
 })
 
