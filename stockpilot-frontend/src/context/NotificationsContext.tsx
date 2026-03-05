@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { notificationsApi  } from '../services/api'
@@ -20,9 +20,41 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
 
+  // Încarcă notificările marcate ca citite din localStorage, per utilizator
+  useEffect(() => {
+    if (!user) {
+      setDismissedIds(new Set())
+      return
+    }
+
+    const key = `notifications:dismissed:${user.id}`
+    const raw = localStorage.getItem(key)
+    if (!raw) {
+      setDismissedIds(new Set())
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as string[]
+      setDismissedIds(new Set(parsed))
+    } catch {
+      setDismissedIds(new Set())
+    }
+  }, [user?.id])
+
+  // Persistă în localStorage când se schimbă lista de notificări marcate
+  useEffect(() => {
+    if (!user) return
+    const key = `notifications:dismissed:${user.id}`
+    localStorage.setItem(key, JSON.stringify([...dismissedIds]))
+  }, [dismissedIds, user?.id])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: notificationsApi.getAll,
+    queryKey: ['notifications', user?.role, user?.location_id],
+    queryFn: () =>
+      notificationsApi.getAll(
+        user?.role === 'stand_manager' && user.location_id ? user.location_id : undefined
+      ),
     // Polling la fiecare 30 secunde
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
