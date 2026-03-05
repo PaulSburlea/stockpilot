@@ -304,7 +304,7 @@ export const stockApi = {
     return request<StockItem[]>(`/stock?${query}`)
   },
   getCritical: () => request<StockItem[]>('/stock/critical'),
-   getCriticalForStand: (location_id: number) => {
+  getCriticalForStand: (location_id: number) => {
     const query = new URLSearchParams({ location_id: String(location_id) })
     return request<CriticalStandItem[]>(`/stock/critical-for-stand?${query}`)
   },

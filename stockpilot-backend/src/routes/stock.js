@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
   res.json(data)
 })
 
-// GET /api/stock/critical — stocuri la sau sub safety stock (versiunea ta, corectă)
+// GET /api/stock/critical — toate stocurile la sau sub safety stock (admin/warehouse)
 router.get('/critical', async (req, res) => {
   const { data, error } = await supabase
     .from('stock')
@@ -31,7 +31,8 @@ router.get('/critical', async (req, res) => {
   res.json(critical)
 })
 
-// GET /api/stock/critical-for-stand?location_id=2 — endpoint nou de la coleg
+// GET /api/stock/critical-for-stand?location_id=2
+// Stocuri critice/scăzute per stand + vânzări 30 zile + cantitate minimă recomandată
 router.get('/critical-for-stand', async (req, res) => {
   const { location_id } = req.query
   if (!location_id) {
@@ -82,7 +83,7 @@ router.get('/critical-for-stand', async (req, res) => {
   res.json(result)
 })
 
-// PATCH /api/stock/:id
+// PATCH /api/stock/:id — ajustare manuală cantitate
 router.patch('/:id', async (req, res) => {
   const { id } = req.params
   const { quantity } = req.body
