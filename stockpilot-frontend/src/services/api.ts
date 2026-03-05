@@ -408,7 +408,10 @@ export const costComparisonApi = {
 
 // ── Notifications ─────────────────────────────────────────
 export const notificationsApi = {
-  getAll: () => request<NotificationSummary>('/notifications'),
+  getAll: (location_id?: number) => {
+    const query = location_id ? `?location_id=${location_id}` : ''
+    return request<NotificationSummary>(`/notifications${query}`)
+  },
 }
 
 // ── Export ─────────────────────────────────────────────────
