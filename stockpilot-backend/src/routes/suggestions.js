@@ -122,7 +122,7 @@ router.post('/run', async (req, res) => {
 // PATCH /api/suggestions/:id — aprobă sau respinge
 router.patch('/:id', async (req, res) => {
   const { id } = req.params
-  const { status } = req.body  // 'approved' sau 'rejected'
+  const { status } = req.body
 
   const { data, error } = await supabase
     .from('reorder_suggestions')
@@ -133,18 +133,27 @@ router.patch('/:id', async (req, res) => {
 
   if (error) return res.status(400).json({ error: error.message })
 
-  // Dacă e aprobat, creează automat mișcarea de stoc
   if (status === 'approved') {
-    await supabase.from('stock_movements').insert([{
-      product_id:       data.product_id,
-      from_location_id: data.from_location_id,
-      to_location_id:   data.to_location_id,
-      quantity:         data.suggested_qty,
-      movement_type:    data.from_location_id ? 'transfer' : 'supplier_order',
-      transport_cost:   data.estimated_cost,
-      status:           'pending',
-      notes:            `Auto-generat din sugestia #${id}`
-    }])
+    const { data: existing } = await supabase
+      .from('stock_movements')
+      .select('id')
+      .eq('notes', `Auto-generat din sugestia #${id}`)
+      .single()
+
+    if (!existing) {
+      const { error: movErr } = await supabase.from('stock_movements').insert([{
+        product_id:       data.product_id,
+        from_location_id: data.from_location_id,
+        to_location_id:   data.to_location_id,
+        quantity:         data.suggested_qty,
+        movement_type:    data.from_location_id ? 'transfer' : 'supplier_order',
+        transport_cost:   data.estimated_cost,
+        status:           'pending',
+        notes:            `Auto-generat din sugestia #${id}`
+      }])
+
+      if (movErr) return res.status(500).json({ error: `Sugestia a fost aprobată, dar mișcarea de stoc nu a putut fi creată: ${movErr.message}` })
+    }
   }
 
   await logAction({

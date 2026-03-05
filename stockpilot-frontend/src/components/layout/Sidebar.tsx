@@ -150,7 +150,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
       {/* Logo */}
-      <div className="p-6 border-b border-slate-800">
+      <div className="h-16 px-6 flex items-center border-b border-slate-800">
         <div className="flex items-center gap-2">
           <Warehouse size={22} className="text-violet-400" />
           <span className="text-lg font-bold text-white tracking-tight">
