@@ -69,6 +69,15 @@ export default function Stock() {
     setRequestQuantities(prev => ({ ...prev, [productId]: valid }))
   }
 
+  const removeRequestItem = (productId: number) => {
+    setCriticalItems(prev => prev.filter(item => item.product_id !== productId))
+    setRequestQuantities(prev => {
+      const next = { ...prev }
+      delete next[productId]
+      return next
+    })
+  }
+
   const sendRequest = async () => {
     if (!user?.location_id || criticalItems.length === 0) {
       setIsRequestModalOpen(false)
@@ -239,7 +248,7 @@ export default function Stock() {
               <div>
                 <h2 className="text-base font-semibold text-slate-100">Solicită produse</h2>
                 <p className="text-xs text-slate-500">
-                  Produsele afișate sunt în stoc critic în acest stand. Cantitatea minimă cerută este mai mare decât numărul de produse vândute în ultima lună + 10.
+                  Produsele afișate sunt în stoc critic sau scăzut în acest stand. Poți ajusta cantitățile sau elimina produse înainte de trimitere.
                 </p>
               </div>
               <button
@@ -265,6 +274,7 @@ export default function Stock() {
                         <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Vândut 30 zile</th>
                         <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate minimă cerere</th>
                         <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate cerută</th>
+                        <th className="px-4 py-2 text-center text-slate-500 uppercase tracking-wider">Acțiuni</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
@@ -293,6 +303,14 @@ export default function Stock() {
                               }
                               className="w-24 px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-right text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
                             />
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => removeRequestItem(item.product_id)}
+                              className="text-[11px] px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300"
+                            >
+                              Șterge
+                            </button>
                           </td>
                         </tr>
                       ))}

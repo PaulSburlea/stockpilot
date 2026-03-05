@@ -100,6 +100,20 @@ export interface Movement {
   to?: Location
 }
 
+export interface MovementSourceCandidate {
+  location_id: number
+  location_name: string
+  city: string
+  available_qty: number
+  sold_last_30_days: number
+  margin: number
+}
+
+export interface MovementOptions {
+  can_fulfil_from_source: boolean
+  candidates: MovementSourceCandidate[]
+}
+
 export interface Suggestion {
   id: number
   product_id: number
@@ -317,14 +331,31 @@ export const salesApi = {
 
 // ── Movements ─────────────────────────────────────────────
 export const movementsApi = {
-  getAll: (status?: string) =>
-    request<Movement[]>(`/movements${status ? `?status=${status}` : ''}`),
+  getAll: (status?: string, location_id?: number) => {
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (location_id) query.set('location_id', String(location_id))
+    const qs = query.toString()
+    return request<Movement[]>(`/movements${qs ? `?${qs}` : ''}`)
+  },
   create: (data: Partial<Movement>) =>
     request<Movement>('/movements', { method: 'POST', body: JSON.stringify(data) }),
   complete: (id: number) =>
     request<Movement>(`/movements/${id}/complete`, { method: 'PATCH' }),
+  completeWithSource: (id: number, source_location_id: number) =>
+    request<Movement>(`/movements/${id}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify({ source_location_id }),
+    }),
   cancel: (id: number) =>
     request<Movement>(`/movements/${id}/cancel`, { method: 'PATCH' }),
+  getOptions: (id: number) =>
+    request<MovementOptions>(`/movements/${id}/options`),
+  forward: (id: number, source_location_id: number, requested_qty: number) =>
+    request<Movement>(`/movements/${id}/forward`, {
+      method: 'POST',
+      body: JSON.stringify({ source_location_id, requested_qty }),
+    }),
 }
 
 // ── Suggestions ───────────────────────────────────────────
