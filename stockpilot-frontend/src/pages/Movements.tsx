@@ -30,6 +30,11 @@ export default function Movements() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['movements'] }),
   })
 
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => movementsApi.cancel(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['movements'] }),
+  })
+
   return (
     <div className="space-y-5">
       {/* Filtru status */}
@@ -105,15 +110,24 @@ export default function Movements() {
                         {status.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="px-5 py-3.5 text-right space-x-2">
                       {m.status === 'pending' && (
-                        <button
-                          onClick={() => completeMutation.mutate(m.id)}
-                          disabled={completeMutation.isPending}
-                          className="text-xs px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          Finalizează
-                        </button>
+                        <>
+                          <button
+                            onClick={() => completeMutation.mutate(m.id)}
+                            disabled={completeMutation.isPending}
+                            className="text-xs px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            Finalizează
+                          </button>
+                          <button
+                            onClick={() => cancelMutation.mutate(m.id)}
+                            disabled={cancelMutation.isPending}
+                            className="text-xs px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            Respinge
+                          </button>
+                        </>
                       )}
                     </td>
                   </tr>

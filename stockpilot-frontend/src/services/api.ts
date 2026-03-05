@@ -61,6 +61,11 @@ export interface StockItem {
   products?: Product
 }
 
+export interface CriticalStandItem extends StockItem {
+  sold_last_30_days: number
+  min_request_qty: number
+}
+
 export interface Sale {
   id: number
   location_id: number
@@ -285,6 +290,10 @@ export const stockApi = {
     return request<StockItem[]>(`/stock?${query}`)
   },
   getCritical: () => request<StockItem[]>('/stock/critical'),
+   getCriticalForStand: (location_id: number) => {
+    const query = new URLSearchParams({ location_id: String(location_id) })
+    return request<CriticalStandItem[]>(`/stock/critical-for-stand?${query}`)
+  },
   update: (id: number, quantity: number) =>
     request<StockItem>(`/stock/${id}`, {
       method: 'PATCH',
@@ -314,6 +323,8 @@ export const movementsApi = {
     request<Movement>('/movements', { method: 'POST', body: JSON.stringify(data) }),
   complete: (id: number) =>
     request<Movement>(`/movements/${id}/complete`, { method: 'PATCH' }),
+  cancel: (id: number) =>
+    request<Movement>(`/movements/${id}/cancel`, { method: 'PATCH' }),
 }
 
 // ── Suggestions ───────────────────────────────────────────
@@ -326,6 +337,11 @@ export const suggestionsApi = {
     request<Suggestion>(`/suggestions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+  createFromStand: (payload: { location_id: number; items: { product_id: number; quantity: number; reason?: string }[] }) =>
+    request<Suggestion[]>('/suggestions/from-stand', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
   getHistory: (params?: {
     location_id?: number
