@@ -3,10 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { stockApi, salesApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { AlertTriangle, TrendingUp, Package, MapPin, TrendingDown, Clock } from 'lucide-react'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  Cell, CartesianGrid,
-} from 'recharts'
 
 type Period = 30 | 60 | 90
 
@@ -45,10 +41,7 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
           key={p}
           onClick={() => onChange(p)}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all
-            ${value === p
-              ? 'bg-violet-600 text-white shadow'
-              : 'text-slate-400 hover:text-slate-200'
-            }`}
+            ${value === p ? 'bg-violet-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
         >
           {p}z
         </button>
@@ -57,17 +50,17 @@ function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Peri
   )
 }
 
-function ChartCard({ title, icon, children, subtitle }: {
+function ChartCard({ title, icon, subtitle, children }: {
   title: string
   icon: React.ReactNode
-  children: React.ReactNode
   subtitle?: string
+  children: React.ReactNode
 }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
       <div className="flex items-center gap-2 mb-1">
         {icon}
-        <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+        <h3 className="text-sm font-semibold text-slate-300">{title}</h3>
       </div>
       {subtitle && <p className="text-xs text-slate-600 mb-4">{subtitle}</p>}
       {!subtitle && <div className="mb-4" />}
@@ -76,26 +69,8 @@ function ChartCard({ title, icon, children, subtitle }: {
   )
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-slate-800 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs shadow-xl">
-      <p className="text-slate-300 font-semibold mb-1.5 max-w-44 truncate">{label}</p>
-      {payload.map((p: any) => (
-        <div key={p.dataKey} className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className="text-slate-400">{p.name}:</span>
-          <span className="font-bold text-slate-100">
-            {p.value === 999 ? '∞' : p.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 const EmptyState = ({ text }: { text: string }) => (
-  <div className="flex items-center justify-center h-48 text-slate-600 text-xs">{text}</div>
+  <div className="h-48 flex items-center justify-center text-slate-600 text-sm">{text}</div>
 )
 
 export default function DashboardStand() {
@@ -127,40 +102,35 @@ export default function DashboardStand() {
   const topSelling = [...(analytics ?? [])]
     .sort((a, b) => b.total_quantity - a.total_quantity)
     .slice(0, 8)
-    .map(i => ({
-      name: i.product.name.length > 20 ? i.product.name.slice(0, 20) + '…' : i.product.name,
-      vândut: i.total_quantity,
-      medie: Number(i.avg_daily.toFixed(1)),
-    }))
 
   const worstSelling = [...(analytics ?? [])]
     .filter(i => i.total_quantity > 0)
     .sort((a, b) => a.total_quantity - b.total_quantity)
     .slice(0, 8)
-    .map(i => ({
-      name: i.product.name.length > 20 ? i.product.name.slice(0, 20) + '…' : i.product.name,
-      vândut: i.total_quantity,
-    }))
 
   const stockCoverage = (allStock ?? [])
     .map(item => {
       const salesData = analytics?.find(a => a.product.id === item.product_id)
       const avgDaily = salesData?.avg_daily ?? 0
-      const daysLeft = avgDaily > 0 ? Math.floor(item.quantity / avgDaily) : 999
+      const daysLeft = avgDaily > 0 ? Math.floor(item.quantity / avgDaily) : null
       return {
-        name: (item.products?.name ?? '').length > 18
-          ? (item.products?.name ?? '').slice(0, 18) + '…'
-          : item.products?.name ?? '',
+        name: item.products?.name ?? '',
         zile: daysLeft,
         stoc: item.quantity,
         noSales: avgDaily === 0,
         isCritical: item.quantity <= item.safety_stock,
+        avgDaily,
       }
     })
-    .sort((a, b) => a.zile - b.zile)
+    .sort((a, b) => (a.zile ?? 9999) - (b.zile ?? 9999))
     .slice(0, 10)
 
-  const productsAtRisk = stockCoverage.filter(i => i.zile < 7 && !i.noSales).length
+  // Afișăm graficul doar dacă cel puțin 2 produse au date de vânzări
+  const validCoverageItems = stockCoverage.filter(i => !i.noSales)
+  const showCoverageChart = validCoverageItems.length >= 2
+
+  const productsAtRisk = validCoverageItems.filter(i => i.zile! < 7).length
+  const maxCoverage = Math.max(...validCoverageItems.map(i => i.zile ?? 0), 1)
 
   return (
     <div className="space-y-6">
@@ -223,34 +193,31 @@ export default function DashboardStand() {
           {topSelling.length === 0 ? (
             <EmptyState text="Nicio vânzare în perioada selectată" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={topSelling} layout="vertical" margin={{ left: 0, right: 24, top: 4, bottom: 4 }}>
-                <XAxis
-                  type="number"
-                  tick={{ fill: '#475569', fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
-                  width={130}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#1e293b' }} />
-                <Bar dataKey="vândut" name="unități" radius={[0, 6, 6, 0]} maxBarSize={22}>
-                  {topSelling.map((_, i) => (
-                    <Cell
-                      key={i}
-                      fill={i === 0 ? '#10b981' : '#3b82f6'}
-                      fillOpacity={1 - i * 0.06}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-3">
+              {topSelling.map((item, i) => {
+                const max = topSelling[0].total_quantity
+                const pct = Math.round((item.total_quantity / max) * 100)
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300 truncate flex-1 mr-3">{item.product.name}</span>
+                      <span className="font-bold text-slate-100 shrink-0">{item.total_quantity} buc</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-800 rounded-full h-1.5">
+                        <div
+                          className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-600 shrink-0 w-16 text-right">
+                        ~{item.avg_daily.toFixed(1)}/zi
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </ChartCard>
 
@@ -262,89 +229,89 @@ export default function DashboardStand() {
           {worstSelling.length === 0 ? (
             <EmptyState text="Nicio vânzare în perioada selectată" />
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={worstSelling} layout="vertical" margin={{ left: 0, right: 24, top: 4, bottom: 4 }}>
-                <XAxis
-                  type="number"
-                  tick={{ fill: '#475569', fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
-                  width={130}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#1e293b' }} />
-                <Bar dataKey="vândut" name="unități" radius={[0, 6, 6, 0]} maxBarSize={22}>
-                  {worstSelling.map((_, i) => (
-                    <Cell key={i} fill="#f97316" fillOpacity={0.95 - i * 0.07} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="space-y-3">
+              {worstSelling.map((item, i) => {
+                const max = worstSelling[worstSelling.length - 1].total_quantity
+                const pct = Math.max(Math.round((item.total_quantity / max) * 100), 4)
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300 truncate flex-1 mr-3">{item.product.name}</span>
+                      <span className="font-bold text-slate-100 shrink-0">{item.total_quantity} buc</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-800 rounded-full h-1.5">
+                        <div
+                          className="bg-orange-500 h-1.5 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-600 shrink-0 w-16 text-right">
+                        ~{item.avg_daily.toFixed(1)}/zi
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </ChartCard>
       </div>
 
-      {/* Acoperire stoc */}
-      <ChartCard
-        title="Zile până la epuizare stoc"
-        icon={<Clock size={14} className="text-violet-400" />}
-        subtitle={`Calculat pe baza mediei zilnice din ultimele ${period} zile · ∞ = fără vânzări înregistrate`}
-      >
-        <ResponsiveContainer width="100%" height={230}>
-          <BarChart data={stockCoverage} margin={{ left: 0, right: 16, top: 4, bottom: 40 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-            <XAxis
-              dataKey="name"
-              tick={{ fill: '#94a3b8', fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              interval={0}
-              angle={-30}
-              textAnchor="end"
-            />
-            <YAxis
-              tick={{ fill: '#475569', fontSize: 10 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={v => v === 999 ? '∞' : String(v)}
-            />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#1e293b' }} />
-            <Bar dataKey="zile" name="zile rămase" radius={[5, 5, 0, 0]} maxBarSize={36}>
-              {stockCoverage.map((item, i) => (
-                <Cell
-                  key={i}
-                  fill={
-                    item.noSales ? '#334155' :
-                    item.zile < 7 ? '#ef4444' :
-                    item.zile < 14 ? '#f97316' : '#7c3aed'
-                  }
-                  fillOpacity={0.9}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="flex items-center gap-5 mt-2 text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-red-500" /> sub 7 zile
+      {/* Acoperire stoc — afișat doar dacă există date suficiente */}
+      {showCoverageChart && (
+        <ChartCard
+          title="Zile până la epuizare stoc"
+          icon={<Clock size={14} className="text-violet-400" />}
+          subtitle={`Calculat pe baza mediei zilnice din ultimele ${period} zile`}
+        >
+          <div className="space-y-3">
+            {validCoverageItems.map((item, i) => {
+              const pct = Math.max(Math.round((item.zile! / maxCoverage) * 100), 4)
+              const barColor =
+                item.zile! < 7 ? 'bg-red-500' :
+                item.zile! < 14 ? 'bg-orange-500' : 'bg-violet-500'
+              const textColor =
+                item.zile! < 7 ? 'text-red-400' :
+                item.zile! < 14 ? 'text-orange-400' : 'text-slate-100'
+
+              return (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-300 truncate flex-1 mr-3">{item.name}</span>
+                    <span className={`font-bold shrink-0 ${textColor}`}>
+                      {item.zile} zile
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-slate-800 rounded-full h-1.5">
+                      <div
+                        className={`${barColor} h-1.5 rounded-full transition-all`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-slate-600 shrink-0 w-16 text-right">
+                      {item.stoc} buc
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-orange-500" /> 7–14 zile
+
+          <div className="flex items-center gap-5 mt-4 pt-3 border-t border-slate-800 text-xs text-slate-500">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-sm bg-red-500" /> sub 7 zile
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-sm bg-orange-500" /> 7–14 zile
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-sm bg-violet-500" /> peste 14 zile
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-violet-600" /> peste 14 zile
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-sm bg-slate-600" /> fără vânzări
-          </div>
-        </div>
-      </ChartCard>
+        </ChartCard>
+      )}
 
       {/* Medie zilnică */}
       <ChartCard
@@ -355,31 +322,28 @@ export default function DashboardStand() {
         {topSelling.length === 0 ? (
           <EmptyState text="Nicio vânzare în perioada selectată" />
         ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={topSelling} margin={{ left: 0, right: 16, top: 4, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: '#94a3b8', fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-                interval={0}
-                angle={-30}
-                textAnchor="end"
-              />
-              <YAxis
-                tick={{ fill: '#475569', fontSize: 10 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: '#1e293b' }} />
-              <Bar dataKey="medie" name="buc/zi" radius={[5, 5, 0, 0]} maxBarSize={36}>
-                {topSelling.map((_, i) => (
-                  <Cell key={i} fill="#3b82f6" fillOpacity={1 - i * 0.06} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="space-y-3">
+            {topSelling.map((item, i) => {
+              const max = Math.max(...topSelling.map(s => s.avg_daily), 0.1)
+              const pct = Math.max(Math.round((item.avg_daily / max) * 100), 4)
+              return (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-300 truncate flex-1 mr-3">{item.product.name}</span>
+                    <span className="font-bold text-slate-100 shrink-0">
+                      {item.avg_daily.toFixed(2)} buc/zi
+                    </span>
+                  </div>
+                  <div className="flex-1 bg-slate-800 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-500 h-1.5 rounded-full transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </ChartCard>
 
