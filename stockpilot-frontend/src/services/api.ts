@@ -61,6 +61,11 @@ export interface StockItem {
   products?: Product
 }
 
+export interface CriticalStandItem extends StockItem {
+  sold_last_30_days: number
+  min_request_qty: number
+}
+
 export interface Sale {
   id: number
   location_id: number
@@ -93,6 +98,20 @@ export interface Movement {
   products?: Product
   from?: Location
   to?: Location
+}
+
+export interface MovementSourceCandidate {
+  location_id: number
+  location_name: string
+  city: string
+  available_qty: number
+  sold_last_30_days: number
+  margin: number
+}
+
+export interface MovementOptions {
+  can_fulfil_from_source: boolean
+  candidates: MovementSourceCandidate[]
 }
 
 export interface Suggestion {
@@ -285,6 +304,10 @@ export const stockApi = {
     return request<StockItem[]>(`/stock?${query}`)
   },
   getCritical: () => request<StockItem[]>('/stock/critical'),
+   getCriticalForStand: (location_id: number) => {
+    const query = new URLSearchParams({ location_id: String(location_id) })
+    return request<CriticalStandItem[]>(`/stock/critical-for-stand?${query}`)
+  },
   update: (id: number, quantity: number) =>
     request<StockItem>(`/stock/${id}`, {
       method: 'PATCH',
@@ -308,12 +331,31 @@ export const salesApi = {
 
 // ── Movements ─────────────────────────────────────────────
 export const movementsApi = {
-  getAll: (status?: string) =>
-    request<Movement[]>(`/movements${status ? `?status=${status}` : ''}`),
+  getAll: (status?: string, location_id?: number) => {
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (location_id) query.set('location_id', String(location_id))
+    const qs = query.toString()
+    return request<Movement[]>(`/movements${qs ? `?${qs}` : ''}`)
+  },
   create: (data: Partial<Movement>) =>
     request<Movement>('/movements', { method: 'POST', body: JSON.stringify(data) }),
   complete: (id: number) =>
     request<Movement>(`/movements/${id}/complete`, { method: 'PATCH' }),
+  completeWithSource: (id: number, source_location_id: number) =>
+    request<Movement>(`/movements/${id}/complete`, {
+      method: 'PATCH',
+      body: JSON.stringify({ source_location_id }),
+    }),
+  cancel: (id: number) =>
+    request<Movement>(`/movements/${id}/cancel`, { method: 'PATCH' }),
+  getOptions: (id: number) =>
+    request<MovementOptions>(`/movements/${id}/options`),
+  forward: (id: number, source_location_id: number, requested_qty: number) =>
+    request<Movement>(`/movements/${id}/forward`, {
+      method: 'POST',
+      body: JSON.stringify({ source_location_id, requested_qty }),
+    }),
 }
 
 // ── Suggestions ───────────────────────────────────────────
@@ -326,6 +368,11 @@ export const suggestionsApi = {
     request<Suggestion>(`/suggestions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+  createFromStand: (payload: { location_id: number; items: { product_id: number; quantity: number; reason?: string }[] }) =>
+    request<Suggestion[]>('/suggestions/from-stand', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
   getHistory: (params?: {
     location_id?: number

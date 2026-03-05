@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { stockApi, locationsApi } from '../services/api'
+import { stockApi, locationsApi, type CriticalStandItem, suggestionsApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { Search, AlertTriangle } from 'lucide-react'
@@ -11,6 +11,10 @@ export default function Stock() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [selectedLocation, setSelectedLocation] = useState<string>('')
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false)
+  const [criticalItems, setCriticalItems] = useState<CriticalStandItem[]>([])
+  const [requestQuantities, setRequestQuantities] = useState<Record<number, number>>({})
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false)
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
@@ -39,8 +43,86 @@ export default function Stock() {
     return { label: 'Normal', color: 'text-emerald-400 bg-emerald-500/10' }
   }
 
+  const openRequestModal = async () => {
+    if (!user?.location_id) return
+    setIsLoadingRequests(true)
+    try {
+      const data = await stockApi.getCriticalForStand(user.location_id)
+      setCriticalItems(data)
+      const initial: Record<number, number> = {}
+      data.forEach(item => {
+        initial[item.product_id] = item.min_request_qty
+      })
+      setRequestQuantities(initial)
+      setIsRequestModalOpen(true)
+    } catch (err) {
+      console.error(err)
+      alert('Nu s-au putut încărca produsele în stoc critic pentru acest stand.')
+    } finally {
+      setIsLoadingRequests(false)
+    }
+  }
+
+  const handleQuantityChange = (productId: number, minQty: number, value: string) => {
+    const numeric = Number(value)
+    const valid = Number.isFinite(numeric) && numeric >= minQty ? numeric : minQty
+    setRequestQuantities(prev => ({ ...prev, [productId]: valid }))
+  }
+
+  const removeRequestItem = (productId: number) => {
+    setCriticalItems(prev => prev.filter(item => item.product_id !== productId))
+    setRequestQuantities(prev => {
+      const next = { ...prev }
+      delete next[productId]
+      return next
+    })
+  }
+
+  const sendRequest = async () => {
+    if (!user?.location_id || criticalItems.length === 0) {
+      setIsRequestModalOpen(false)
+      return
+    }
+
+    const items = criticalItems.map(item => ({
+      product_id: item.product_id,
+      quantity: requestQuantities[item.product_id] ?? item.min_request_qty,
+    }))
+
+    try {
+      await suggestionsApi.createFromStand({
+        location_id: user.location_id,
+        items,
+      })
+      setIsRequestModalOpen(false)
+      alert('Cererea a fost trimisă către depozit.')
+    } catch (err) {
+      console.error(err)
+      alert('A apărut o eroare la trimiterea cererii.')
+    }
+  }
+
   return (
     <div className="space-y-5">
+      {/* Header + acțiuni */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-100">Stocuri</h1>
+          <p className="text-xs text-slate-500">
+            Vizualizează stocurile pe produse și locații.
+          </p>
+        </div>
+        {user?.role === 'stand_manager' && (
+          <button
+            disabled={isLoadingRequests}
+            onClick={openRequestModal}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isLoadingRequests ? 'Se încarcă...' : 'SOLICITĂ PRODUSE'}
+          </button>
+        )}
+      </div>
+
       {/* Filtre */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -157,6 +239,105 @@ export default function Stock() {
           </div>
         )}
       </div>
+
+      {/* Modal solicitare produse */}
+      {isRequestModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-100">Solicită produse</h2>
+                <p className="text-xs text-slate-500">
+                  Produsele afișate sunt în stoc critic sau scăzut în acest stand. Poți ajusta cantitățile sau elimina produse înainte de trimitere.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsRequestModalOpen(false)}
+                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {criticalItems.length === 0 ? (
+              <p className="text-sm text-slate-400">
+                Nu există produse în stoc critic pentru acest stand.
+              </p>
+            ) : (
+              <div className="border border-slate-800 rounded-xl overflow-hidden mb-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-900/60">
+                        <th className="px-4 py-2 text-left text-slate-500 uppercase tracking-wider">Produs</th>
+                        <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Stoc curent</th>
+                        <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Vândut 30 zile</th>
+                        <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate minimă cerere</th>
+                        <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate cerută</th>
+                        <th className="px-4 py-2 text-center text-slate-500 uppercase tracking-wider">Acțiuni</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {criticalItems.map(item => (
+                        <tr key={item.id} className="bg-slate-900/40">
+                          <td className="px-4 py-2 text-slate-200">
+                            <div className="font-medium">{item.products?.name}</div>
+                            <div className="text-[11px] text-slate-500">{item.products?.sku}</div>
+                          </td>
+                          <td className="px-4 py-2 text-right text-slate-100">
+                            {item.quantity}
+                          </td>
+                          <td className="px-4 py-2 text-right text-slate-100">
+                            {item.sold_last_30_days}
+                          </td>
+                          <td className="px-4 py-2 text-right text-emerald-400 font-semibold">
+                            {item.min_request_qty}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <input
+                              type="number"
+                              min={item.min_request_qty}
+                              value={requestQuantities[item.product_id] ?? item.min_request_qty}
+                              onChange={e =>
+                                handleQuantityChange(item.product_id, item.min_request_qty, e.target.value)
+                              }
+                              className="w-24 px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-right text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                            />
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => removeRequestItem(item.product_id)}
+                              className="text-[11px] px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300"
+                            >
+                              Șterge
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setIsRequestModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-300 hover:text-slate-100"
+              >
+                Anulează
+              </button>
+              <button
+                onClick={sendRequest}
+                disabled={criticalItems.length === 0}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Trimite cererea către depozit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
