@@ -285,7 +285,7 @@ export default function StockMap() {
 
       {/* Harta */}
       <div className="relative bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"
-           style={{ height: '600px' }}
+           style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}
       >
         <MapContainer
           center={[45.9432, 24.9668]} // centrul României

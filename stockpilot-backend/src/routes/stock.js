@@ -20,15 +20,17 @@ router.get('/', async (req, res) => {
   res.json(data)
 })
 
-// GET /api/stock/critical — stocuri sub safety stock * 2
+// GET /api/stock/critical — stocuri la sau sub safety stock
 router.get('/critical', async (req, res) => {
   const { data, error } = await supabase
     .from('stock')
     .select('*, locations(name, city), products(name, sku)')
-    .filter('quantity', 'lt', supabase.raw('safety_stock * 2'))
 
   if (error) return res.status(500).json({ error: error.message })
-  res.json(data)
+
+  // Același criteriu ca frontend-ul: quantity <= safety_stock
+  const critical = data.filter(s => s.quantity <= s.safety_stock)
+  res.json(critical)
 })
 
 // PATCH /api/stock/:id — actualizează cantitate (ex: ajustare manuală)

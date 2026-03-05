@@ -4,7 +4,7 @@ import { suggestionsApi, locationsApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import {
   CheckCircle, XCircle, History,
-  ArrowRight, TrendingUp, Package, Filter
+  ArrowRight, Package
 } from 'lucide-react'
 
 function ImpactBadge({ suggestion }: { suggestion: any }) {
@@ -32,7 +32,6 @@ function ImpactBadge({ suggestion }: { suggestion: any }) {
 // Statistici aggregate
 function HistoryStats({ suggestions }: { suggestions: any[] }) {
   const approved = suggestions.filter(s => s.status === 'approved')
-  const rejected = suggestions.filter(s => s.status === 'rejected')
   const approvalRate = suggestions.length > 0
     ? Math.round((approved.length / suggestions.length) * 100)
     : 0
