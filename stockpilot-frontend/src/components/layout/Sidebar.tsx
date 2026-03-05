@@ -7,7 +7,6 @@ import {
   Lightbulb,
   BoxesIcon,
   LogOut,
-  Warehouse,
   ShoppingCart,
   Users,
   MapPin,
@@ -151,9 +150,9 @@ export default function Sidebar() {
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
       {/* Logo */}
       <div className="h-16 px-6 flex items-center border-b border-slate-800 shrink-0">
-        <div className="flex items-center gap-2">
-          <Warehouse size={22} className="text-violet-400" />
-          <span className="text-lg font-bold text-white tracking-tight">
+        <div className="flex items-center gap-2.5">
+          <img src="/logo.png" alt="" className="h-13 w-13 object-contain" />
+          <span className="text-3xl font-bold text-white tracking-tight">
             Stock<span className="text-violet-400">Pilot</span>
           </span>
         </div>
