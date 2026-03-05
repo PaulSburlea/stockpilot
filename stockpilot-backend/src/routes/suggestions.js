@@ -17,6 +17,73 @@ router.get('/', async (req, res) => {
   res.json(data)
 })
 
+// POST /api/suggestions/from-stand — cerere manuală de produse dintr-un stand
+router.post('/from-stand', async (req, res) => {
+  const { location_id, items } = req.body
+
+  if (!location_id || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'location_id și items sunt obligatorii' })
+  }
+
+  // Găsim depozitul central (presupunem un singur rând cu type = 'warehouse')
+  const { data: warehouse, error: warehouseError } = await supabase
+    .from('locations')
+    .select('id')
+    .eq('type', 'warehouse')
+    .limit(1)
+    .single()
+
+  if (warehouseError || !warehouse) {
+    return res.status(500).json({ error: 'Nu s-a putut identifica depozitul central' })
+  }
+
+  const rows = items.map(item => ({
+    product_id: item.product_id,
+    from_location_id: warehouse.id,
+    to_location_id: location_id,
+    suggested_qty: item.quantity,
+    reason: item.reason || 'Cerere manuală de produse din stand',
+    status: 'pending',
+  }))
+
+  const { data, error } = await supabase
+    .from('reorder_suggestions')
+    .insert(rows)
+    .select()
+
+  if (error) {
+    return res.status(500).json({ error: error.message })
+  }
+
+  // Creăm și mișcări de stoc pentru fiecare produs cerut,
+  // astfel încât cererea să fie vizibilă în pagina "Mișcări stoc"
+  const movementRows = data.map(s => ({
+    product_id:       s.product_id,
+    from_location_id: s.from_location_id,
+    to_location_id:   s.to_location_id,
+    quantity:         s.suggested_qty,
+    movement_type:    'transfer',
+    status:           'pending',
+    notes:            `Cerere manuală din stand #${s.id}`,
+  }))
+
+  await supabase
+    .from('stock_movements')
+    .insert(movementRows)
+
+  await logAction({
+    user: req.user,
+    action: 'CREATE',
+    entity: 'suggestion',
+    entityId: data?.[0]?.id,
+    description: `Cerere manuală de produse din stand pentru locația ${location_id}`,
+    metadata: { location_id, items },
+    req,
+  })
+
+  res.status(201).json(data)
+})
+
 // GET /api/suggestions/history?location_id=2&product_id=3&status=approved
 router.get('/history', async (req, res) => {
   const { location_id, product_id, status, limit = 100 } = req.query

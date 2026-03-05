@@ -9,12 +9,15 @@ router.get('/', async (req, res) => {
     const notifications = []
 
     // ── 1. Stocuri critice (sub safety stock) ──
-    const { data: criticalStock } = await supabase
+    const { data: allStockForCritical } = await supabase
       .from('stock')
       .select('*, products(name, sku), locations(name, city, type)')
-      .filter('quantity', 'lte', supabase.raw('safety_stock'))
 
-    for (const item of criticalStock ?? []) {
+    const criticalStock = (allStockForCritical ?? []).filter(
+      item => item.quantity <= item.safety_stock
+    )
+
+    for (const item of criticalStock) {
       if (item.locations?.type === 'warehouse') continue
       notifications.push({
         id: `critical-${item.id}`,
@@ -35,14 +38,12 @@ router.get('/', async (req, res) => {
       })
     }
 
-    // ── 2. Stocuri scăzute (sub safety stock * 2) ──
-    const { data: lowStock } = await supabase
-      .from('stock')
-      .select('*, products(name, sku), locations(name, city, type)')
-      .filter('quantity', 'gt', supabase.raw('safety_stock'))
-      .filter('quantity', 'lte', supabase.raw('safety_stock * 2'))
+    // ── 2. Stocuri scăzute (între safety stock și safety stock * 2) ──
+    const lowStock = (allStockForCritical ?? []).filter(
+      item => item.quantity > item.safety_stock && item.quantity <= item.safety_stock * 2
+    )
 
-    for (const item of lowStock ?? []) {
+    for (const item of lowStock) {
       if (item.locations?.type === 'warehouse') continue
       notifications.push({
         id: `low-${item.id}`,
