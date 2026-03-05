@@ -101,7 +101,13 @@ export default function Export() {
           title="Stocuri curente"
           description="Export complet al stocurilor per produs per locație, cu status și valoare totală."
           color="bg-blue-500/10"
-          onExport={() => exportApi.downloadStock(stockLocation ? Number(stockLocation) : undefined)}
+          onExport={() => {
+            if (user?.role === 'stand_manager' && user.location_id) {
+              exportApi.downloadStock(user.location_id)
+            } else {
+              exportApi.downloadStock(stockLocation ? Number(stockLocation) : undefined)
+            }
+          }}
           options={
             user?.role !== 'stand_manager' ? (
               <div>
@@ -127,10 +133,16 @@ export default function Export() {
           title="Vânzări"
           description="Istoricul vânzărilor cu detalii per produs, locație și valoare totală."
           color="bg-emerald-500/10"
-          onExport={() => exportApi.downloadSales(
-            salesDays,
-            salesLocation ? Number(salesLocation) : undefined
-          )}
+          onExport={() => {
+            if (user?.role === 'stand_manager' && user.location_id) {
+              exportApi.downloadSales(salesDays, user.location_id)
+            } else {
+              exportApi.downloadSales(
+                salesDays,
+                salesLocation ? Number(salesLocation) : undefined
+              )
+            }
+          }}
           options={
             <div className="space-y-3">
               <div>
@@ -201,7 +213,15 @@ export default function Export() {
           title="Raport complet"
           description="Raport combinat cu stoc actual, vânzări pe 30 zile, rata zilnică și zile estimate până la epuizare."
           color="bg-orange-500/10"
-          onExport={() => exportApi.downloadSummary(summaryLocation ? Number(summaryLocation) : undefined)}
+          onExport={() => {
+            if (user?.role === 'stand_manager' && user.location_id) {
+              exportApi.downloadSummary(user.location_id)
+            } else {
+              exportApi.downloadSummary(
+                summaryLocation ? Number(summaryLocation) : undefined
+              )
+            }
+          }}
           options={
             user?.role !== 'stand_manager' ? (
               <div>
