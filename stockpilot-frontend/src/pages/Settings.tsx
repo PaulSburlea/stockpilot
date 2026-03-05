@@ -332,7 +332,7 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
 }
 
 export default function Settings() {
-  const { data: isLoading } = useQuery({
+  const { isLoading } = useQuery({
     queryKey: ['settings'],
     queryFn: settingsApi.getAll,
   })

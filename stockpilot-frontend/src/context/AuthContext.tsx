@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface User {
   id: number
@@ -23,8 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const queryClient = useQueryClient()
 
-  // La pornire verifică dacă există sesiune salvată
   useEffect(() => {
     const savedToken = localStorage.getItem('token')
     const savedUser  = localStorage.getItem('user')
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await res.json()
+    queryClient.clear()
     setToken(data.token)
     setUser(data.user)
     localStorage.setItem('token', data.token)
@@ -55,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
+    queryClient.clear()
     setToken(null)
     setUser(null)
     localStorage.removeItem('token')
