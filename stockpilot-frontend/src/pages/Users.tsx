@@ -13,8 +13,20 @@ type FormState = {
   location_id: string
 }
 
+type NewLocationForm = {
+  name: string
+  city: string
+  address: string
+  lat: string
+  lng: string
+}
+
 const emptyForm: FormState = {
   name: '', email: '', password: '', role: '', location_id: ''
+}
+
+const emptyLocationForm: NewLocationForm = {
+  name: '', city: '', address: '', lat: '', lng: ''
 }
 
 const roleConfig = {
@@ -45,6 +57,9 @@ export default function Users() {
   const [formError, setFormError] = useState('')
   const [deletingUser, setDeletingUser] = useState<User | null>(null)
   const [deleteError, setDeleteError] = useState('')
+
+  const [showNewLocation, setShowNewLocation] = useState(false)
+  const [newLocationForm, setNewLocationForm] = useState<NewLocationForm>(emptyLocationForm)
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
@@ -85,9 +100,29 @@ export default function Users() {
     onError: (err: Error) => setDeleteError(err.message),
   })
 
+  const createLocationMutation = useMutation({
+    mutationFn: (data: {
+      name: string
+      type: string
+      city: string
+      address?: string
+      lat?: number
+      lng?: number
+    }) => locationsApi.create(data),
+    onSuccess: (newLoc) => {
+      queryClient.invalidateQueries({ queryKey: ['locations'] })
+      setForm(f => ({ ...f, location_id: String(newLoc.id) }))
+      setShowNewLocation(false)
+      setNewLocationForm(emptyLocationForm)
+    },
+    onError: (err: Error) => setFormError(err.message),
+  })
+
   const openCreate = () => {
     setForm(emptyForm)
     setFormError('')
+    setShowNewLocation(false)
+    setNewLocationForm(emptyLocationForm)
     setModalMode('create')
   }
 
@@ -101,6 +136,8 @@ export default function Users() {
       location_id: user.location_id ? String(user.location_id) : '',
     })
     setFormError('')
+    setShowNewLocation(false)
+    setNewLocationForm(emptyLocationForm)
     setModalMode('edit')
   }
 
@@ -109,6 +146,8 @@ export default function Users() {
     setEditingUser(null)
     setForm(emptyForm)
     setFormError('')
+    setShowNewLocation(false)
+    setNewLocationForm(emptyLocationForm)
   }
 
   const handleSubmit = () => {
@@ -142,11 +181,25 @@ export default function Users() {
     }
   }
 
+  const handleCreateLocation = () => {
+    if (!newLocationForm.name || !newLocationForm.city) {
+      setFormError('Completează numele și orașul locației')
+      return
+    }
+    setFormError('')
+    createLocationMutation.mutate({
+      name: newLocationForm.name,
+      city: newLocationForm.city,
+      address: newLocationForm.address || undefined,
+      type: form.role === 'warehouse_manager' ? 'warehouse' : 'stand',
+      lat: newLocationForm.lat ? Number(newLocationForm.lat) : undefined,
+      lng: newLocationForm.lng ? Number(newLocationForm.lng) : undefined,
+    })
+  }
+
   const isPending = createMutation.isPending || updateMutation.isPending
   const stands = locations?.filter(l => l.type === 'stand') ?? []
   const allLocations = locations ?? []
-
-  // Rolul selectat necesită locație?
   const roleNeedsLocation = form.role && form.role !== 'admin'
 
   return (
@@ -196,7 +249,7 @@ export default function Users() {
                     </div>
                   </div>
 
-                  {/* Acțiuni — nu poți șterge propriul cont */}
+                  {/* Acțiuni */}
                   <div className="flex gap-1">
                     <button
                       onClick={() => openEdit(user)}
@@ -242,7 +295,7 @@ export default function Users() {
       {/* Modal creare / editare */}
       {modalMode && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-semibold text-slate-100">
                 {modalMode === 'create' ? 'Utilizator nou' : 'Editează utilizator'}
@@ -280,8 +333,11 @@ export default function Users() {
               {/* Parolă */}
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Parolă {modalMode === 'edit' && <span className="text-slate-600">(lasă gol pentru a păstra parola actuală)</span>}
-                  {modalMode === 'create' && '*'}
+                  Parolă{' '}
+                  {modalMode === 'edit'
+                    ? <span className="text-slate-600">(lasă gol pentru a păstra parola actuală)</span>
+                    : '*'
+                  }
                 </label>
                 <input
                   type="password"
@@ -307,24 +363,119 @@ export default function Users() {
                 </select>
               </div>
 
-              {/* Locație — apare doar dacă rolul o cere */}
+              {/* Locație */}
               {roleNeedsLocation && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                    Locație *
-                  </label>
-                  <select
-                    value={form.location_id}
-                    onChange={e => setForm(f => ({ ...f, location_id: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  >
-                    <option value="">Selectează locația</option>
-                    {(form.role === 'warehouse_manager' ? allLocations.filter(l => l.type === 'warehouse') : stands).map(loc => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name} — {loc.city}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-slate-400">Locație *</label>
+                    {!showNewLocation && (
+                      <button
+                        onClick={() => setShowNewLocation(true)}
+                        className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 transition-colors"
+                      >
+                        <Plus size={11} />
+                        {form.role === 'warehouse_manager' ? 'Depozit nou' : 'Stand nou'}
+                      </button>
+                    )}
+                  </div>
+
+                  {!showNewLocation ? (
+                    <select
+                      value={form.location_id}
+                      onChange={e => setForm(f => ({ ...f, location_id: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    >
+                      <option value="">Selectează locația</option>
+                      {(form.role === 'warehouse_manager'
+                        ? allLocations.filter(l => l.type === 'warehouse')
+                        : stands
+                      ).map(loc => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.name} — {loc.city}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="space-y-2 p-3 bg-slate-800/60 border border-slate-700 rounded-lg">
+                      <p className="text-xs text-slate-400 font-medium">
+                        {form.role === 'warehouse_manager' ? 'Depozit nou' : 'Stand nou'}
+                      </p>
+
+                      <input
+                        type="text"
+                        value={newLocationForm.name}
+                        onChange={e => setNewLocationForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="Nume (ex: Stand Unirii)"
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+
+                      <input
+                        type="text"
+                        value={newLocationForm.city}
+                        onChange={e => setNewLocationForm(f => ({ ...f, city: e.target.value }))}
+                        placeholder="Oraș (ex: Cluj-Napoca)"
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+
+                      <input
+                        type="text"
+                        value={newLocationForm.address}
+                        onChange={e => setNewLocationForm(f => ({ ...f, address: e.target.value }))}
+                        placeholder="Adresă (opțional)"
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                      />
+
+                      {/* Coordonate GPS */}
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          step="0.000001"
+                          value={newLocationForm.lat}
+                          onChange={e => setNewLocationForm(f => ({ ...f, lat: e.target.value }))}
+                          placeholder="Latitudine (ex: 46.7712)"
+                          className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        />
+                        <input
+                          type="number"
+                          step="0.000001"
+                          value={newLocationForm.lng}
+                          onChange={e => setNewLocationForm(f => ({ ...f, lng: e.target.value }))}
+                          placeholder="Longitudine (ex: 23.6236)"
+                          className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        Coordonatele sunt necesare pentru afișarea pe hartă.{' '}
+                        <a
+                          href="https://www.latlong.net/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-violet-400 hover:underline"
+                        >
+                          Găsește coordonate →
+                        </a>
+                      </p>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            setShowNewLocation(false)
+                            setNewLocationForm(emptyLocationForm)
+                          }}
+                          className="flex-1 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg transition-colors"
+                        >
+                          Anulează
+                        </button>
+                        <button
+                          onClick={handleCreateLocation}
+                          disabled={createLocationMutation.isPending}
+                          className="flex-1 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {createLocationMutation.isPending ? 'Se creează...' : 'Creează locația'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

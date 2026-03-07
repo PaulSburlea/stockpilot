@@ -87,17 +87,22 @@ export interface SalesAnalytics {
 export interface Movement {
   id: number
   product_id: number
-  from_location_id?: number
+  from_location_id: number | null
   to_location_id: number
   quantity: number
   movement_type: 'transfer' | 'supplier_order' | 'adjustment'
-  status: 'pending' | 'in_transit' | 'completed' | 'cancelled'
-  transport_cost?: number
-  notes?: string
+  status: 'pending' | 'awaiting_pickup' | 'in_transit' | 'completed' | 'cancelled'
+  transport_cost: number | null
+  notes: string | null
+  recommendation_reason: string | null   // NOU
+  recommended_lead_time: number | null   // NOU
+  accepted_at: string | null             // NOU
+  picked_up_at: string | null            // NOU
+  completed_at: string | null
   created_at: string
-  products?: Product
-  from?: Location
-  to?: Location
+  products?: { id: number; name: string; sku: string; weight_kg: number }
+  from_location?: { id: number; name: string; city: string; type: string }
+  to_location?: { id: number; name: string; city: string; type: string }
 }
 
 export interface MovementSourceCandidate {
@@ -181,6 +186,7 @@ export interface CostOption {
   pros: string[]
   cons: string[]
   recommended?: boolean
+  stale_days?: number
 }
 
 export interface CostComparison {
@@ -253,10 +259,24 @@ export interface LocationSettings {
   surplus_threshold_days: number
   max_transfer_qty: number
   auto_suggestions: boolean
+  stale_days_threshold?: number
+  storage_capacity?: number
   notes?: string
   updated_at?: string
   updated_by?: string
   locations?: Location
+}
+
+export interface StaleStockItem {
+  id: number
+  product_id: number
+  location_id: number
+  quantity: number
+  safety_stock: number
+  days_since_last_sale: number
+  last_sale_at: string | null
+  products?: { name: string; sku: string; category?: string }
+  locations?: { name: string; city: string }
 }
 
 // ── Users ─────────────────────────────────────────────────
@@ -274,6 +294,12 @@ export const usersApi = {
 export const locationsApi = {
   getAll: () => request<Location[]>('/locations'),
   getById: (id: number) => request<Location & { stock: StockItem[] }>(`/locations/${id}`),
+  create: (data: { name: string; type: string; city: string; address?: string; lat?: number; lng?: number }) =>
+    request<Location>('/locations', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: { name: string; city: string; address?: string; lat?: number; lng?: number }) =>
+    request<Location>(`/locations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: number) =>
+    request<{ success: boolean }>(`/locations/${id}`, { method: 'DELETE' }),
 }
 
 // ── Products ──────────────────────────────────────────────
@@ -313,6 +339,12 @@ export const stockApi = {
       method: 'PATCH',
       body: JSON.stringify({ quantity }),
     }),
+  getStaleForStand: (locationId: number) =>
+    request<{ stale_threshold_days: number; items: StaleStockItem[] }>(
+      `/stock/stale-for-stand?location_id=${locationId}`
+    ),
+  getStaleNetwork: () =>
+    request<StaleStockItem[]>('/stock/stale-network'),
 }
 
 // ── Sales ─────────────────────────────────────────────────
@@ -331,30 +363,53 @@ export const salesApi = {
 
 // ── Movements ─────────────────────────────────────────────
 export const movementsApi = {
-  getAll: (status?: string, location_id?: number) => {
-    const query = new URLSearchParams()
-    if (status) query.set('status', status)
-    if (location_id) query.set('location_id', String(location_id))
-    const qs = query.toString()
-    return request<Movement[]>(`/movements${qs ? `?${qs}` : ''}`)
+  getAll: (params?: { status?: string; location_id?: number }) => {
+    const query = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params)
+            .filter(([, v]) => v !== undefined)
+            .map(([k, v]) => [k, String(v)])
+        ).toString()
+      : ''
+    return request<Movement[]>(`/movements${query}`)
   },
-  create: (data: Partial<Movement>) =>
-    request<Movement>('/movements', { method: 'POST', body: JSON.stringify(data) }),
-  complete: (id: number) =>
-    request<Movement>(`/movements/${id}/complete`, { method: 'PATCH' }),
-  completeWithSource: (id: number, source_location_id: number) =>
-    request<Movement>(`/movements/${id}/complete`, {
+
+  create: (data: {
+    product_id: number
+    from_location_id?: number
+    to_location_id: number
+    quantity: number
+    movement_type: string
+    notes?: string
+  }) =>
+    request<Movement>('/movements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Warehouse acceptă cererea (poate schimba sursa)
+  accept: (id: number, source_location_id?: number) =>
+    request<Movement>(`/movements/${id}/accept`, {
       method: 'PATCH',
       body: JSON.stringify({ source_location_id }),
     }),
-  cancel: (id: number) =>
-    request<Movement>(`/movements/${id}/cancel`, { method: 'PATCH' }),
-  getOptions: (id: number) =>
-    request<MovementOptions>(`/movements/${id}/options`),
-  forward: (id: number, source_location_id: number, requested_qty: number) =>
-    request<Movement>(`/movements/${id}/forward`, {
-      method: 'POST',
-      body: JSON.stringify({ source_location_id, requested_qty }),
+
+  // Stand B confirmă că a expediat
+  pickup: (id: number) =>
+    request<Movement>(`/movements/${id}/pickup`, { method: 'PATCH' }),
+
+  // Stand A confirmă că a primit
+  receive: (id: number) =>
+    request<Movement>(`/movements/${id}/receive`, { method: 'PATCH' }),
+
+  orderFromSupplier: (id: number) =>
+    request<Movement>(`/movements/${id}/order-from-supplier`, { method: 'POST' }),
+
+  // Anulare cu motiv opțional
+  cancel: (id: number, reason?: string) =>
+    request<Movement>(`/movements/${id}/cancel`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
     }),
 }
 
@@ -457,6 +512,15 @@ export const auditApi = {
     return request<AuditResponse>(`/audit?${query}`)
   },
   getStats: () => request<AuditStats>('/audit/stats'),
+  getMyActivity: (params?: { location_id?: number; page?: number; limit?: number }) => {
+    const query = new URLSearchParams()
+    if (params?.location_id) query.set('location_id', String(params.location_id))
+    if (params?.page)        query.set('page', String(params.page))
+    if (params?.limit)       query.set('limit', String(params.limit))
+    return request<{ logs: AuditLog[]; total: number; page: number; limit: number }>(
+      `/audit/my-activity?${query}`
+    )
+  },
 }
 
 // ── Location Settings ─────────────────────────────────────────

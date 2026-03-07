@@ -1,8 +1,12 @@
 import { Router } from 'express'
 import bcrypt from 'bcrypt'
 import supabase from '../config/supabase.js'
+import { authenticate, authorize } from '../middleware/auth.js'
+import { logAction } from '../services/audit.js'
 
 const router = Router()
+
+router.use(authenticate)
 
 // GET /api/users — toți utilizatorii
 router.get('/', async (req, res) => {
@@ -23,7 +27,6 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Toate câmpurile obligatorii trebuie completate' })
   }
 
-  // Verifică dacă email-ul există deja
   const { data: existing } = await supabase
     .from('users')
     .select('id')
@@ -42,12 +45,23 @@ router.post('/', async (req, res) => {
       name, email,
       password: hashedPassword,
       role,
-      location_id: location_id || null
+      location_id: location_id || null,
     }])
     .select('id, name, email, role, location_id, created_at')
     .single()
 
   if (error) return res.status(400).json({ error: error.message })
+
+  await logAction({
+    user: req.user,
+    action: 'CREATE',
+    entity: 'user',
+    entityId: data.id,
+    description: `Utilizator nou creat: ${data.name} (${data.email}) — rol: ${data.role}`,
+    metadata: { name: data.name, email: data.email, role: data.role, location_id: data.location_id },
+    req,
+  })
+
   res.status(201).json(data)
 })
 
@@ -58,8 +72,8 @@ router.put('/:id', async (req, res) => {
 
   const updates = { name, email, role, location_id: location_id || null }
 
-  // Parola e opțională la editare
-  if (password && password.trim() !== '') {
+  const passwordChanged = password && password.trim() !== ''
+  if (passwordChanged) {
     updates.password = await bcrypt.hash(password, 10)
   }
 
@@ -71,6 +85,17 @@ router.put('/:id', async (req, res) => {
     .single()
 
   if (error) return res.status(400).json({ error: error.message })
+
+  await logAction({
+    user: req.user,
+    action: 'UPDATE',
+    entity: 'user',
+    entityId: Number(id),
+    description: `Utilizator actualizat: ${data.name} (${data.email})${passwordChanged ? ' — parolă schimbată' : ''}`,
+    metadata: { name: data.name, email: data.email, role: data.role, location_id: data.location_id, password_changed: passwordChanged },
+    req,
+  })
+
   res.json(data)
 })
 
@@ -78,12 +103,30 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params
 
+  // Fetch înainte de ștergere ca să logăm numele
+  const { data: userToDelete } = await supabase
+    .from('users')
+    .select('id, name, email, role')
+    .eq('id', id)
+    .single()
+
   const { error } = await supabase
     .from('users')
     .delete()
     .eq('id', id)
 
   if (error) return res.status(400).json({ error: error.message })
+
+  await logAction({
+    user: req.user,
+    action: 'DELETE',
+    entity: 'user',
+    entityId: Number(id),
+    description: `Utilizator șters: ${userToDelete?.name ?? 'N/A'} (${userToDelete?.email ?? 'N/A'})`,
+    metadata: { name: userToDelete?.name, email: userToDelete?.email, role: userToDelete?.role },
+    req,
+  })
+
   res.json({ success: true })
 })
 

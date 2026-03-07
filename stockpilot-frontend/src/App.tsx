@@ -16,6 +16,7 @@ import CostComparison from './pages/CostComparison'
 import Export from './pages/Export'
 import StockMap from './pages/StockMap'
 import AuditLog from './pages/AuditLog'
+import ActivityLog from './pages/ActivityLog'
 import Settings from './pages/Settings'
 import SuggestionsHistory from './pages/SuggestionsHistory'
 
@@ -39,30 +40,32 @@ export default function App() {
 
       {/* Rute protejate — orice rol */}
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard"   element={<Dashboard />} />
-        <Route path="/stock"       element={<Stock />} />
-        <Route path="/movements"   element={<Movements />} />
-        <Route path="/sales" element={<Sales />} />
+        <Route path="/dashboard"     element={<Dashboard />} />
+        <Route path="/stock"         element={<Stock />} />
+        <Route path="/movements"     element={<Movements />} />
+        <Route path="/sales"         element={<Sales />} />
         <Route path="/locations/:id" element={<LocationDetail />} />
-        <Route path="/locations" element={<Locations />} />
-        <Route path="/export" element={<Export />} />
-        <Route path="/map" element={<StockMap />} />
+        <Route path="/locations"     element={<Locations />} />
+        <Route path="/export"        element={<Export />} />
+        <Route path="/map"           element={<StockMap />} />
+        {/* Activitate proprie — accesibil tuturor rolurilor */}
+        <Route path="/activity"      element={<ActivityLog />} />
       </Route>
 
       {/* Rute protejate — doar admin și warehouse_manager */}
       <Route element={<ProtectedRoute allowedRoles={['admin', 'warehouse_manager']} />}>
-        <Route path="/products"    element={<Products />} />
-        <Route path="/suggestions" element={<Suggestions />} />
-        <Route path="/forecasting"  element={<Forecasting />} />
-        <Route path="/cost-comparison" element={<CostComparison />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/products"           element={<Products />} />
+        <Route path="/suggestions"        element={<Suggestions />} />
+        <Route path="/forecasting"        element={<Forecasting />} />
+        <Route path="/cost-comparison"    element={<CostComparison />} />
+        <Route path="/settings"           element={<Settings />} />
         <Route path="/suggestions/history" element={<SuggestionsHistory />} />
       </Route>
 
       {/* Rute protejate — doar admin */}
       <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
         <Route path="/users" element={<Users />} />
-        <Route path="/audit"  element={<AuditLog />} />
+        <Route path="/audit" element={<AuditLog />} />
       </Route>
 
       <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />

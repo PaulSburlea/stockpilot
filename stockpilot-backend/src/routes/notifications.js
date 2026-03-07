@@ -1,7 +1,10 @@
 import { Router } from 'express'
 import supabase from '../config/supabase.js'
+import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
+
+router.use(authenticate)
 
 // GET /api/notifications — generează notificări din starea curentă
 // Acceptă opțional ?location_id= pentru a filtra pe un stand anume
@@ -23,7 +26,7 @@ router.get('/', async (req, res) => {
     const { data: allStockForCritical } = await stockQuery
 
     const criticalStock = (allStockForCritical ?? []).filter(
-      item => item.quantity <= item.safety_stock
+      item => item.quantity <= item.safety_stock && item.quantity > 0
     )
 
     for (const item of criticalStock) {
@@ -196,6 +199,45 @@ router.get('/', async (req, res) => {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
 
+            // ── awaiting_pickup: notificare pentru Stand B (trebuie să expedieze) ──
+    const { data: awaitingPickup } = await supabase
+      .from('stock_movements')
+      .select(`
+        id, quantity, product_id, from_location_id, to_location_id, accepted_at,
+        products (name),
+        from_location:from_location_id (id, name, city),
+        to_location:to_location_id (id, name, city)
+      `)
+      .eq('status', 'awaiting_pickup')
+
+    for (const r of awaitingPickup ?? []) {
+      // Stand B (sursă) → trebuie să expedieze
+      if (!locationIdNum || locationIdNum === r.from_location_id) {
+        notifications.push({
+          id: `pickup-src-${r.id}`,
+          type: 'warning',
+          title: 'Trebuie să expediezi produse',
+          message: `${r.products?.name} — ${r.quantity} buc pentru standul ${r.to_location?.name} (${r.to_location?.city})`,
+          metadata: { movement_id: r.id },
+          created_at: r.accepted_at,
+          action_url: '/movements',
+        })
+      }
+
+      // Stand A (destinație) → cererea aprobată, în așteptarea expedierii
+      if (!locationIdNum || locationIdNum === r.to_location_id) {
+        notifications.push({
+          id: `pickup-dst-${r.id}`,
+          type: 'info',
+          title: 'Cerere aprobată — în pregătire',
+          message: `${r.products?.name} — ${r.quantity} buc urmează să fie expediat din ${r.from_location?.name}`,
+          metadata: { movement_id: r.id },
+          created_at: r.accepted_at,
+          action_url: '/movements',
+        })
+      }
+    }
+
     res.json({
       notifications,
       summary: {
@@ -205,6 +247,7 @@ router.get('/', async (req, res) => {
         info: notifications.filter(n => n.type === 'info').length,
       }
     })
+
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

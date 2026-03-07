@@ -17,6 +17,7 @@ import {
   ScrollText,
   SlidersHorizontal,
   ClipboardList,
+  Activity,
 } from 'lucide-react'
 
 interface NavItem {
@@ -106,6 +107,14 @@ const navItems: NavItem[] = [
     label: 'Export rapoarte',
     icon: <Download size={18} />,
     roles: ['admin', 'warehouse_manager', 'stand_manager'],
+  },
+  // Activitate proprie — stand și warehouse văd /activity (propriile acțiuni)
+  // Admin vede /audit (tot sistemul) + /activity (propriile acțiuni) via /audit
+  {
+    to: '/activity',
+    label: 'Activitate',
+    icon: <Activity size={18} />,
+    roles: ['warehouse_manager', 'stand_manager'],
   },
   {
     to: '/audit',
