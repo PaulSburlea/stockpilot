@@ -65,6 +65,44 @@ function SettingSlider({
   )
 }
 
+// Slider procentaj (0.05–1.00 stocat ca decimal, afișat ca %)
+function PercentSlider({
+  label, value, min, max, step = 0.05, tooltip, onChange, disabled,
+}: {
+  label: string; value: number; min: number; max: number
+  step?: number; tooltip: string
+  onChange: (v: number) => void; disabled?: boolean
+}) {
+  const pct = ((value - min) / (max - min)) * 100
+  const display = Math.round(value * 100)
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs font-medium text-slate-300">{label}</label>
+          <InfoTooltip text={tooltip} />
+        </div>
+        <span className="text-sm font-bold text-violet-400 tabular-nums">{display}%</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        disabled={disabled}
+        onChange={e => onChange(Number(Number(e.target.value).toFixed(2)))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
+          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-violet-500
+          [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:hover:bg-violet-400
+          [&::-webkit-slider-thumb]:shadow-lg"
+        style={{ background: `linear-gradient(to right, #7c3aed ${pct}%, #1e293b ${pct}%)` }}
+      />
+      <div className="flex justify-between text-xs text-slate-600">
+        <span>{Math.round(min * 100)}%</span>
+        <span>{Math.round(max * 100)}%</span>
+      </div>
+    </div>
+  )
+}
+
 function LocationSettingsCard({ locationId }: { locationId: number }) {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
@@ -77,7 +115,6 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
     queryFn: () => settingsApi.getByLocation(locationId),
   })
 
-  // FIX: sync form când settings se încarcă/resetează, dar nu suprascrie modificările în curs
   useEffect(() => {
     if (settings) setForm(prev => prev ?? settings)
   }, [settings])
@@ -91,7 +128,6 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
       setSaveError(null)
       setTimeout(() => setSaved(false), 3000)
     },
-    // FIX: onError lipsea — erori înghițite fără feedback
     onError: (err: Error) => {
       setSaveError(err.message ?? 'Eroare la salvare. Încearcă din nou.')
     },
@@ -109,7 +145,7 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
     },
   })
 
-  const location = settings?.locations
+  const location    = settings?.locations
   const currentForm = form ?? settings
 
   if (isLoading || !currentForm) return (
@@ -117,22 +153,30 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
   )
 
   const isWarehouse = location?.type === 'warehouse'
-  const isBusy = updateMutation.isPending || resetMutation.isPending
+  const isBusy      = updateMutation.isPending || resetMutation.isPending
 
   const hasChanges = form && settings && (
-    form.lead_time_days          !== settings.lead_time_days          ||
-    form.safety_stock_multiplier !== settings.safety_stock_multiplier ||
-    form.reorder_threshold_days  !== settings.reorder_threshold_days  ||
-    form.surplus_threshold_days  !== settings.surplus_threshold_days  ||
-    form.max_transfer_qty        !== settings.max_transfer_qty        ||
-    form.auto_suggestions        !== settings.auto_suggestions        ||
-    form.stale_days_threshold    !== settings.stale_days_threshold    ||
-    form.storage_capacity        !== settings.storage_capacity        ||
-    form.notes                   !== settings.notes
+    form.lead_time_days           !== settings.lead_time_days           ||
+    form.safety_stock_multiplier  !== settings.safety_stock_multiplier  ||
+    form.reorder_threshold_days   !== settings.reorder_threshold_days   ||
+    form.surplus_threshold_days   !== settings.surplus_threshold_days   ||
+    form.min_transfer_qty         !== settings.min_transfer_qty         ||
+    form.max_transfer_qty         !== settings.max_transfer_qty         ||
+    form.max_transport_cost_ratio !== settings.max_transport_cost_ratio ||
+    form.auto_suggestions         !== settings.auto_suggestions         ||
+    form.stale_days_threshold     !== settings.stale_days_threshold     ||
+    form.storage_capacity         !== settings.storage_capacity         ||
+    form.notes                    !== settings.notes
   )
 
   const set = <K extends keyof LocationSettings>(key: K, val: LocationSettings[K]) =>
     setForm(f => f ? { ...f, [key]: val } : f)
+
+  // Validare live min ≤ max
+  const minQty = currentForm.min_transfer_qty ?? 5
+  const maxQty = currentForm.max_transfer_qty ?? 100
+  const minMaxError = minQty > maxQty
+    ? 'Cantitatea minimă nu poate depăși cantitatea maximă.' : null
 
   return (
     <div className={`bg-slate-900 border rounded-xl overflow-hidden transition-all duration-200
@@ -165,6 +209,9 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
               Lead <span className="text-slate-300 font-medium">{currentForm.lead_time_days}z</span>
             </span>
             <span className="text-slate-500">
+              Min <span className="text-slate-300 font-medium">{currentForm.min_transfer_qty ?? 5}buc</span>
+            </span>
+            <span className="text-slate-500">
               Prag <span className="text-slate-300 font-medium">{currentForm.reorder_threshold_days}z</span>
             </span>
             <span className={`font-medium ${currentForm.auto_suggestions ? 'text-emerald-400' : 'text-slate-600'}`}>
@@ -189,18 +236,25 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
       {expanded && (
         <div className="border-t border-slate-800">
 
-          {/* Eroare salvare */}
-          {saveError && (
-            <div className="mx-5 mt-5 flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
-              <AlertCircle size={14} className="text-red-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs font-medium text-red-400">Eroare la salvare</p>
-                <p className="text-xs text-red-400/70 mt-0.5">{saveError}</p>
-              </div>
-              <button
-                onClick={() => setSaveError(null)}
-                className="ml-auto text-red-400/50 hover:text-red-400 text-xs"
-              >✕</button>
+          {/* Erori */}
+          {(saveError || minMaxError) && (
+            <div className="mx-5 mt-5 space-y-2">
+              {saveError && (
+                <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
+                  <AlertCircle size={14} className="text-red-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-red-400">Eroare la salvare</p>
+                    <p className="text-xs text-red-400/70 mt-0.5">{saveError}</p>
+                  </div>
+                  <button onClick={() => setSaveError(null)} className="ml-auto text-red-400/50 hover:text-red-400 text-xs">✕</button>
+                </div>
+              )}
+              {minMaxError && (
+                <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
+                  <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                  <p className="text-xs text-amber-400">{minMaxError}</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -239,12 +293,53 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
                   tooltip="Înmulțește stocul de siguranță setat per produs. 1.5× = tratează minimul ca și cum ar fi cu 50% mai mare."
                   onChange={v => set('safety_stock_multiplier', v)}
                 />
+              </div>
+            </section>
+
+            {/* ── Transfer & cost ── */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <Sliders size={12} className="text-slate-600" />
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+                  Transfer & cost
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <SettingSlider
+                  label="Cantitate minimă transfer" unit="buc" step={1} disabled={isBusy}
+                  value={currentForm.min_transfer_qty ?? 5} min={1} max={50}
+                  tooltip="Sugestiile cu mai puține unități decât acest prag sunt ignorate — nu merită logistic să miști 1-2 bucăți."
+                  onChange={v => set('min_transfer_qty', v)}
+                />
                 <SettingSlider
                   label="Cantitate maximă transfer" unit="buc" step={10} disabled={isBusy}
                   value={currentForm.max_transfer_qty} min={10} max={500}
                   tooltip="Limita per transfer sugerat. Previne transferuri care ar lăsa sursa fără stoc."
                   onChange={v => set('max_transfer_qty', v)}
                 />
+                <PercentSlider
+                  label="Cost maxim transport / marfă" disabled={isBusy}
+                  value={currentForm.max_transport_cost_ratio ?? 0.25} min={0.05} max={1}
+                  tooltip="Dacă costul de transport depășește X% din valoarea mărfii mutate, transferul e ignorat. Ex: 25% = transport de 50 RON pentru marfă de 200 RON."
+                  onChange={v => set('max_transport_cost_ratio', v)}
+                />
+              </div>
+
+              {/* Preview: la 25% cu un exemplu */}
+              <div className="mt-3 px-3 py-2 bg-slate-800/50 border border-slate-800 rounded-lg">
+                <p className="text-xs text-slate-500">
+                  Cu pragul curent de{' '}
+                  <span className="text-slate-300 font-medium">
+                    {Math.round((currentForm.max_transport_cost_ratio ?? 0.25) * 100)}%
+                  </span>
+                  , un transfer de{' '}
+                  <span className="text-slate-300 font-medium">{currentForm.min_transfer_qty ?? 5} buc</span>
+                  {' '}la produs de <span className="text-slate-300 font-medium">20 RON/buc</span>{' '}
+                  acceptă transport maxim de{' '}
+                  <span className="text-slate-300 font-medium">
+                    {((currentForm.max_transport_cost_ratio ?? 0.25) * (currentForm.min_transfer_qty ?? 5) * 20).toFixed(0)} RON
+                  </span>.
+                </p>
               </div>
             </section>
 
@@ -277,7 +372,7 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
               )}
             </section>
 
-            {/* ── Algoritm ── */}
+            {/* ── Control algoritm ── */}
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <Sliders size={12} className="text-slate-600" />
@@ -332,8 +427,7 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
                   <p className="text-xs text-slate-600">
                     Actualizat {new Date(settings.updated_at).toLocaleString('ro-RO')}
                     {settings.updated_by && settings.updated_by !== 'System'
-                      ? ` · ${settings.updated_by}`
-                      : ''}
+                      ? ` · ${settings.updated_by}` : ''}
                   </p>
                 )}
               </div>
@@ -349,8 +443,8 @@ function LocationSettingsCard({ locationId }: { locationId: number }) {
                   Reset
                 </button>
                 <button
-                  onClick={() => form && updateMutation.mutate(form)}
-                  disabled={isBusy || !hasChanges}
+                  onClick={() => form && !minMaxError && updateMutation.mutate(form)}
+                  disabled={isBusy || !hasChanges || !!minMaxError}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold
                     transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
                     ${saved
