@@ -18,27 +18,27 @@ L.Icon.Default.mergeOptions({
 // Calculează statistici per locație
 function getLocationStats(locationId: number, allStock: StockItem[]) {
   const stock = allStock.filter(s => s.location_id === locationId)
-  const totalQty     = stock.reduce((s, i) => s + i.quantity, 0)
+  const totalQty      = stock.reduce((s, i) => s + i.quantity, 0)
   const criticalCount = stock.filter(i => i.quantity <= i.safety_stock).length
   const lowCount      = stock.filter(i => i.quantity > i.safety_stock && i.quantity <= i.safety_stock * 2).length
   const productCount  = stock.length
   const totalValue    = stock.reduce((s, i) => s + i.quantity * (i.products?.unit_price ?? 0), 0)
 
   const riskLevel =
-    criticalCount > 0  ? 'critical' :
-    lowCount > 0       ? 'warning' :
-    totalQty === 0     ? 'empty' : 'good'
+    criticalCount > 0 ? 'critical' :
+    lowCount > 0      ? 'warning'  :
+    totalQty === 0    ? 'empty'    : 'good'
 
   return { totalQty, criticalCount, lowCount, productCount, totalValue, riskLevel }
 }
 
 // Culori pentru cercuri pe hartă
 const riskColors = {
-  critical: { color: '#ef4444', fill: '#ef4444' },
-  warning:  { color: '#f97316', fill: '#f97316' },
-  empty:    { color: '#6b7280', fill: '#6b7280' },
-  good:     { color: '#10b981', fill: '#10b981' },
-  warehouse:{ color: '#3b82f6', fill: '#3b82f6' },
+  critical:  { color: '#ef4444', fill: '#ef4444' },
+  warning:   { color: '#f97316', fill: '#f97316' },
+  empty:     { color: '#6b7280', fill: '#6b7280' },
+  good:      { color: '#10b981', fill: '#10b981' },
+  warehouse: { color: '#3b82f6', fill: '#3b82f6' },
 }
 
 // Card lateral pentru locația selectată
@@ -100,9 +100,9 @@ function LocationSideCard({
       {/* KPI-uri */}
       <div className="grid grid-cols-3 gap-px bg-slate-800 border-b border-slate-800">
         {[
-          { label: 'Stoc total', value: stats.totalQty.toLocaleString(), color: 'text-slate-100' },
-          { label: 'Produse', value: stats.productCount, color: 'text-slate-100' },
-          { label: 'Critice', value: stats.criticalCount, color: stats.criticalCount > 0 ? 'text-red-400' : 'text-slate-100' },
+          { label: 'Stoc total',  value: stats.totalQty.toLocaleString(), color: 'text-slate-100' },
+          { label: 'Produse',     value: stats.productCount,              color: 'text-slate-100' },
+          { label: 'Critice',     value: stats.criticalCount,             color: stats.criticalCount > 0 ? 'text-red-400' : 'text-slate-100' },
         ].map(kpi => (
           <div key={kpi.label} className="bg-slate-900 py-3 text-center">
             <p className={`text-lg font-bold ${kpi.color}`}>{kpi.value}</p>
@@ -195,9 +195,7 @@ function MapLegend() {
           </div>
         ))}
       </div>
-      <p className="text-xs text-slate-600 mt-2">
-        Dimensiunea cercului = volumul stocului
-      </p>
+      <p className="text-xs text-slate-600 mt-2">Dimensiunea cercului = volumul stocului</p>
     </div>
   )
 }
@@ -219,9 +217,12 @@ export default function StockMap() {
   const stands    = locations?.filter(l => l.type === 'stand') ?? []
   const warehouse = locations?.find(l => l.type === 'warehouse')
 
+  // Standuri fără coordonate — nu apar pe hartă
+  const standsWithoutCoords = stands.filter(s => !s.lat || !s.lng)
+
   // Calculează raza cercului proporțional cu stocul
   const getRadius = (locationId: number) => {
-    const stats = getLocationStats(locationId, allStock ?? [])
+    const stats    = getLocationStats(locationId, allStock ?? [])
     const maxStock = Math.max(...(locations ?? []).map(l =>
       getLocationStats(l.id, allStock ?? []).totalQty
     ))
@@ -266,9 +267,10 @@ export default function StockMap() {
           },
           {
             label: 'Valoare rețea',
-            value: (allStock ?? [])
-              .reduce((s, i) => s + i.quantity * (i.products?.unit_price ?? 0), 0)
-              .toLocaleString('ro-RO', { maximumFractionDigits: 0 }) + ' RON',
+            value:
+              (allStock ?? [])
+                .reduce((s, i) => s + i.quantity * (i.products?.unit_price ?? 0), 0)
+                .toLocaleString('ro-RO', { maximumFractionDigits: 0 }) + ' RON',
             icon: <TrendingUp size={15} className="text-violet-400" />,
             color: 'text-violet-400',
           },
@@ -283,12 +285,26 @@ export default function StockMap() {
         ))}
       </div>
 
+      {/* Avertizare standuri fără coordonate */}
+      {standsWithoutCoords.length > 0 && (
+        <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2.5 text-xs text-amber-400">
+          <MapPin size={13} className="shrink-0" />
+          <span>
+            {standsWithoutCoords.length === 1
+              ? `Standul "${standsWithoutCoords[0].name}" nu apare pe hartă — lipsesc coordonatele GPS.`
+              : `${standsWithoutCoords.length} standuri nu apar pe hartă — lipsesc coordonatele: ${standsWithoutCoords.map(s => s.name).join(', ')}.`
+            }
+          </span>
+        </div>
+      )}
+
       {/* Harta */}
-      <div className="relative bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"
-           style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}
+      <div
+        className="relative bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden"
+        style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}
       >
         <MapContainer
-          center={[45.9432, 24.9668]} // centrul României
+          center={[45.9432, 24.9668]}
           zoom={7}
           style={{ height: '100%', width: '100%', background: '#0f172a' }}
           zoomControl={true}
@@ -321,7 +337,7 @@ export default function StockMap() {
             </CircleMarker>
           )}
 
-          {/* Standuri */}
+          {/* Standuri — doar cele cu coordonate */}
           {stands.map(stand => {
             if (!stand.lat || !stand.lng) return null
             const stats  = getLocationStats(stand.id, allStock ?? [])

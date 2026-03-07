@@ -6,16 +6,21 @@ import { Bell, MapPin } from 'lucide-react'
 import NotificationsPanel from './NotificationsPanel'
 
 const pageTitles: Record<string, string> = {
-  '/dashboard':       'Dashboard',
-  '/stock':           'Gestionare Stocuri',
-  '/products':        'Produse',
-  '/movements':       'Mișcări Stoc',
-  '/suggestions':     'Sugestii Reaprovizionare',
-  '/sales':           'Înregistrare Vânzări',
-  '/users':           'Utilizatori',
-  '/locations':       'Locații',
-  '/forecasting':     'Forecast Stocuri',
-  '/cost-comparison': 'Comparator Costuri',
+  '/dashboard':           'Dashboard',
+  '/stock':               'Gestionare Stocuri',
+  '/products':            'Produse',
+  '/movements':           'Mișcări Stoc',
+  '/suggestions':         'Sugestii Reaprovizionare',
+  '/suggestions/history': 'Istoric Sugestii', 
+  '/sales':               'Înregistrare Vânzări',
+  '/users':               'Utilizatori',
+  '/locations':           'Locații',
+  '/forecasting':         'Forecast Stocuri',
+  '/cost-comparison':     'Comparator Costuri',
+  '/export':              'Export Rapoarte',   
+  '/map':                 'Hartă Rețea',        
+  '/audit':               'Audit Log',          
+  '/settings':            'Setări Locații', 
 }
 
 export default function Header() {

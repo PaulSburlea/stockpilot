@@ -20,7 +20,6 @@ const typeConfig = {
 function CostBreakdown({ option }: { option: CostOption }) {
   const config = typeConfig[option.type]
   const isRecommended = option.recommended
-  const isCheapest = false
 
   return (
     <div className={`border rounded-xl p-5 space-y-4 relative
@@ -34,6 +33,14 @@ function CostBreakdown({ option }: { option: CostOption }) {
         <div className="absolute -top-3 left-5">
           <span className="bg-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full">
             ✓ Recomandat
+          </span>
+        </div>
+      )}
+
+      {option.stale_days && (
+        <div className="absolute -top-3 right-5">
+          <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold px-3 py-1 rounded-full">
+            ♻ Stoc blocat {option.stale_days === 9999 ? '' : `${option.stale_days}z`}
           </span>
         </div>
       )}

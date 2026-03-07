@@ -1,8 +1,11 @@
 import { Router } from 'express'
 import supabase from '../config/supabase.js'
 import { logAction } from '../services/audit.js'
+import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
+
+router.use(authenticate)
 
 // POST /api/sales — înregistrează o vânzare
 // Asta e cel mai important endpoint — scade din stoc automat

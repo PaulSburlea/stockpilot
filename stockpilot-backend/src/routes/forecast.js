@@ -1,7 +1,10 @@
 import { Router } from 'express'
 import supabase from '../config/supabase.js'
+import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
+
+router.use(authenticate)
 
 // GET /api/forecast?location_id=2&product_id=5
 router.get('/', async (req, res) => {
