@@ -265,6 +265,8 @@ export interface LocationSettings {
   updated_at?: string
   updated_by?: string
   locations?: Location
+  min_transfer_qty?: number
+  max_transport_cost_ratio?: number
 }
 
 export interface StaleStockItem {
