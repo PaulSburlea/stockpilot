@@ -19,8 +19,8 @@ router.get('/', async (req, res) => {
   res.json(data)
 })
 
-// POST /api/users — creează utilizator nou
-router.post('/', async (req, res) => {
+// POST /api/users — creează utilizator nou (doar admin)
+router.post('/', authorize('admin'), async (req, res) => {
   const { name, email, password, role, location_id } = req.body
 
   if (!name || !email || !password || !role) {
@@ -65,8 +65,8 @@ router.post('/', async (req, res) => {
   res.status(201).json(data)
 })
 
-// PUT /api/users/:id — editează utilizator
-router.put('/:id', async (req, res) => {
+// PUT /api/users/:id — editează utilizator (doar admin)
+router.put('/:id', authorize('admin'), async (req, res) => {
   const { id } = req.params
   const { name, email, role, location_id, password } = req.body
 
@@ -99,9 +99,14 @@ router.put('/:id', async (req, res) => {
   res.json(data)
 })
 
-// DELETE /api/users/:id — șterge utilizator
-router.delete('/:id', async (req, res) => {
+// DELETE /api/users/:id — șterge utilizator (doar admin)
+router.delete('/:id', authorize('admin'), async (req, res) => {
   const { id } = req.params
+
+  // Nu permite auto-ștergerea
+  if (Number(id) === req.user.id) {
+    return res.status(400).json({ error: 'Nu te poți șterge pe tine însuți' })
+  }
 
   // Fetch înainte de ștergere ca să logăm numele
   const { data: userToDelete } = await supabase

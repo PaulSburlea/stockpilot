@@ -354,7 +354,7 @@ export default function Movements() {
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
-  const { data: movements, isLoading } = useQuery({
+  const { data: movements, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['movements', statusFilter, user?.location_id],
     queryFn: () => movementsApi.getAll({
       status: (statusFilter && statusFilter !== 'active') ? statusFilter : undefined,
@@ -541,6 +541,12 @@ export default function Movements() {
     return null
   }
 
+  // ── Filtered rows ──────────────────────────────────────────────────────────
+
+  const visibleMovements = statusFilter === 'active'
+    ? (movements ?? []).filter(m => ACTIVE_STATUSES.has(m.status))
+    : (movements ?? [])
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -601,9 +607,22 @@ export default function Movements() {
             <tbody className="divide-y divide-slate-800">
               {isLoading ? (
                 <tr><td colSpan={8} className="text-center py-12 text-slate-500">Se încarcă...</td></tr>
-              ) : (statusFilter === 'active' ? (movements ?? []).filter(m => ACTIVE_STATUSES.has(m.status)) : (movements ?? [])).length === 0 ? (
+              ) : isError ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-12">
+                    <p className="text-slate-400 mb-2">Eroare la încărcarea mișcărilor.</p>
+                    <p className="text-slate-500 text-sm mb-3">{error instanceof Error ? error.message : 'Eroare necunoscută'}</p>
+                    <button
+                      onClick={() => refetch()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white"
+                    >
+                      Reîncearcă
+                    </button>
+                  </td>
+                </tr>
+              ) : visibleMovements.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-12 text-slate-500">Nu există mișcări</td></tr>
-              ) : (statusFilter === 'active' ? (movements ?? []).filter(m => ACTIVE_STATUSES.has(m.status)) : (movements ?? [])).map(m => {
+              ) : visibleMovements.map(m => {
                 const statusCfg = statusConfig[m.status] ?? statusConfig.pending
                 const showRecommendation =
                   m.recommendation_reason &&

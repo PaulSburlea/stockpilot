@@ -21,6 +21,21 @@ export async function generateSuggestions() {
 
   if (!warehouse) throw new Error('Depozitul central nu a fost găsit')
 
+  // ── 1b. Mișcări active per (produs × sursă × destinație) ─────────────────
+  // Folosit la step 11 pentru a nu genera sugestii identice cu mișcări deja active.
+  // Cheia e identică cu cheia de deduplicare: produs-dest-sursa
+  const { data: activeMovementsRaw } = await supabase
+    .from('stock_movements')
+    .select('product_id, from_location_id, to_location_id, quantity, status')
+    .in('status', ['pending', 'awaiting_pickup', 'in_transit'])
+
+  const activeMovementKeys = new Set(
+    (activeMovementsRaw ?? []).map(
+      m => `${m.product_id}-${m.to_location_id}-${m.from_location_id ?? 'ext'}`
+    )
+  )
+
+
   // ── 2. Ultima vânzare per produs × stand + vânzări 30 zile ───────────────
   const lookbackDate = new Date(Date.now() - LAST_SALE_LOOKBACK_DAYS * 86400000).toISOString()
   const { data: recentSalesRaw } = await supabase
@@ -115,7 +130,6 @@ export async function generateSuggestions() {
       const qty                  = Number(stock.quantity)
       const effectiveSafetyStock = Number(stock.safety_stock) * settings.safety_stock_multiplier
       const dailySales           = salesRates[`${stand.id}-${product.id}`] || 0
-      const daysRemaining        = dailySales > 0 ? (qty - effectiveSafetyStock) / dailySales : Infinity
       const leadTime             = getLeadTime(warehouse.id, stand.id, transportCosts)
       const staleDays            = daysSinceLastSale(stand.id, product.id)
       const everSold             = hasEverBeenSold(stand.id, product.id)
@@ -125,6 +139,8 @@ export async function generateSuggestions() {
         Math.floor(qty - effectiveSafetyStock),
         settings.max_transfer_qty
       )
+
+      const daysRemaining = dailySales > 0 ? (qty - effectiveSafetyStock) / dailySales : Infinity
 
       // ── DEFICIT ───────────────────────────────────────────────────────────
       if (isFinite(daysRemaining) && daysRemaining < leadTime + settings.lead_time_days) {
@@ -428,16 +444,18 @@ export async function generateSuggestions() {
     }
   }
 
-  // ── 11. Deduplicare ──────────────────────────────────────────────────────────
-  // Cheia include și from pentru a nu bloca sugestiile no_traction (to = warehouse)
+  // ── 11. Deduplicare + filtrare mișcări active identice ───────────────────────
+  // Sărim sugestiile pentru care există deja o mișcare activă cu:
+  //   • același produs, aceeași sursă, aceeași destinație
+  // Nu blocăm sugestii cu sursă diferită (ex: depozit vs stand surplus)
   const deduplicated = []
   const seen = new Set()
   for (const s of suggestions) {
     const key = `${s.product_id}-${s.to_location_id}-${s.from_location_id ?? 'ext'}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      deduplicated.push(s)
-    }
+    if (seen.has(key)) continue
+    if (activeMovementKeys.has(key)) continue  // mișcare identică deja activă
+    seen.add(key)
+    deduplicated.push(s)
   }
   if (deduplicated.length === 0) return []
 
@@ -450,47 +468,28 @@ export async function generateSuggestions() {
   //
   // Rezultat: la fiecare rulare setul pending reflectă exact starea curentă
 
+  // ── 12. Înlocuire completă a sugestiilor pending ────────────────────────────
+  // La fiecare rulare, lista pending reflectă EXACT situația curentă:
+  //   • Toate pending-urile vechi → superseded (inclusiv cele neprocesate)
+  //   • Setul nou → inserat fresh
+  // Astfel, o sugestie rezolvată manual (adjustment, transfer direct etc.)
+  // nu mai apare după re-rulare.
+
   const { data: existingPending } = await supabase
-    .from('reorder_suggestions').select('*').eq('status', 'pending')
+    .from('reorder_suggestions').select('id').eq('status', 'pending')
 
-  const newKeySet = new Set(
-    deduplicated.map(s => `${s.product_id}-${s.to_location_id}-${s.from_location_id ?? 'ext'}`)
-  )
-
-  // Sugestii care nu mai sunt valide — le supersedăm
-  const toSupersede = (existingPending ?? []).filter(
-    s => !newKeySet.has(`${s.product_id}-${s.to_location_id}-${s.from_location_id ?? 'ext'}`)
-  )
-  if (toSupersede.length > 0) {
+  if ((existingPending ?? []).length > 0) {
     await supabase
       .from('reorder_suggestions')
       .update({ status: 'superseded' })
-      .in('id', toSupersede.map(s => s.id))
+      .in('id', existingPending.map(s => s.id))
   }
 
-  // Sugestii rămase valide (nu supersede-uite)
-  const survivingKeys = new Set(
-    (existingPending ?? [])
-      .filter(s => !toSupersede.some(sup => sup.id === s.id))
-      .map(s => `${s.product_id}-${s.to_location_id}-${s.from_location_id ?? 'ext'}`)
-  )
-
-  // Sugestii noi care nu există deja
-  const trulyNew = deduplicated.filter(
-    s => !survivingKeys.has(`${s.product_id}-${s.to_location_id}-${s.from_location_id ?? 'ext'}`)
-  )
-
-  const surviving = (existingPending ?? []).filter(
-    s => !toSupersede.some(sup => sup.id === s.id)
-  )
-
-  if (trulyNew.length === 0) return surviving
-
   const { data: inserted, error } = await supabase
-    .from('reorder_suggestions').insert(trulyNew).select()
+    .from('reorder_suggestions').insert(deduplicated).select()
 
   if (error) throw new Error(`Eroare la salvarea sugestiilor: ${error.message}`)
-  return [...surviving, ...(inserted ?? [])]
+  return inserted ?? []
 }
 
 // ── Builder de reasons structurate ────────────────────────────────────────────
