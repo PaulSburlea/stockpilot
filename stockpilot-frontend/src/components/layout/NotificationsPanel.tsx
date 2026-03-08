@@ -1,10 +1,26 @@
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNotifications } from '../../context/NotificationsContext'
-import type { Notification } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
+import { locationsApi } from '../../services/api'
+import type { Notification, Location } from '../../services/api'
 import {
   AlertTriangle, Info, X, CheckCheck,
-  Bell, ArrowRight
+  Bell, ArrowRight, MapPin
 } from 'lucide-react'
+
+type FilterType = 'all' | 'critical' | 'warning' | 'info'
+
+/** Id-uri de locație (stand) asociate notificării, pentru filtrare. */
+function getNotificationLocationIds(n: Notification): number[] {
+  const m = n.metadata ?? {}
+  const ids: number[] = []
+  if (m.location_id != null) ids.push(Number(m.location_id))
+  if (m.to_location_id != null) ids.push(Number(m.to_location_id))
+  if (m.from_location_id != null) ids.push(Number(m.from_location_id))
+  return [...new Set(ids)]
+}
 
 const typeConfig = {
   critical: {
@@ -101,13 +117,47 @@ interface Props {
 }
 
 export default function NotificationsPanel({ onClose }: Props) {
+  const { user } = useAuth()
   const { notifications, summary, dismiss, dismissAll } = useNotifications()
   const navigate = useNavigate()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [locationFilter, setLocationFilter] = useState<number | ''>('')
+
+  const { data: locations } = useQuery({
+    queryKey: ['locations'],
+    queryFn: locationsApi.getAll,
+    enabled: user?.role === 'admin' || user?.role === 'warehouse_manager',
+  })
+  const stands = (locations ?? []).filter((l: Location) => l.type === 'stand')
+
+  const byType =
+    filter === 'all'
+      ? notifications
+      : notifications.filter(n => n.type === filter)
+  const filteredNotifications =
+    locationFilter === ''
+      ? byType
+      : byType.filter(n => getNotificationLocationIds(n).includes(locationFilter as number))
 
   const handleNavigate = (url: string) => {
     navigate(url)
     onClose()
   }
+
+  const filterButtons: { key: FilterType; label: string; count: number; activeColor: string }[] = [
+    { key: 'all', label: 'Toate', count: summary.total, activeColor: 'bg-slate-600 text-slate-100' },
+    ...(summary.critical > 0
+      ? [{ key: 'critical' as const, label: 'Critice', count: summary.critical, activeColor: 'bg-red-500/20 text-red-400' }]
+      : []),
+    ...(summary.warning > 0
+      ? [{ key: 'warning' as const, label: 'Atenție', count: summary.warning, activeColor: 'bg-orange-500/20 text-orange-400' }]
+      : []),
+    ...(summary.info > 0
+      ? [{ key: 'info' as const, label: 'Info', count: summary.info, activeColor: 'bg-blue-500/20 text-blue-400' }]
+      : []),
+  ]
+
+  const showStandFilter = (user?.role === 'admin' || user?.role === 'warehouse_manager') && stands.length > 0
 
   return (
     <div className="absolute right-0 top-12 w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl shadow-black/40 z-50 overflow-hidden">
@@ -141,43 +191,84 @@ export default function NotificationsPanel({ onClose }: Props) {
         </div>
       </div>
 
-      {/* Sumar tipuri */}
+      {/* Sumar tipuri — click = filtrează lista (sortare pe tip) */}
       {summary.total > 0 && (
-        <div className="flex gap-2 px-5 py-3 border-b border-slate-800">
-          {summary.critical > 0 && (
-            <div className="flex items-center gap-1.5 text-xs bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              {summary.critical} critice
-            </div>
-          )}
-          {summary.warning > 0 && (
-            <div className="flex items-center gap-1.5 text-xs bg-orange-500/10 text-orange-400 px-2.5 py-1 rounded-full">
-              <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-              {summary.warning} atenție
-            </div>
-          )}
-          {summary.info > 0 && (
-            <div className="flex items-center gap-1.5 text-xs bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              {summary.info} info
-            </div>
-          )}
+        <div className="flex flex-wrap gap-2 px-5 py-3 border-b border-slate-800">
+          {filterButtons.map(({ key, label, count, activeColor }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full transition-colors
+                ${filter === key
+                  ? activeColor + ' ring-1 ring-slate-500'
+                  : key === 'all'
+                    ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300'
+                    : key === 'critical'
+                      ? 'bg-red-500/10 text-red-400/80 hover:bg-red-500/20 hover:text-red-400'
+                      : key === 'warning'
+                        ? 'bg-orange-500/10 text-orange-400/80 hover:bg-orange-500/20 hover:text-orange-400'
+                        : 'bg-blue-500/10 text-blue-400/80 hover:bg-blue-500/20 hover:text-blue-400'
+                }`}
+            >
+              {key !== 'all' && (
+                <div
+                  className={`w-1.5 h-1.5 rounded-full shrink-0
+                    ${key === 'critical' ? 'bg-red-500' : key === 'warning' ? 'bg-orange-500' : 'bg-blue-500'}`}
+                />
+              )}
+              {label}
+              <span className={filter === key ? 'font-semibold' : ''}>{count}</span>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Lista notificări */}
+      {/* Filtru stand — doar pentru admin / manager depozit */}
+      {showStandFilter && (
+        <div className="px-5 py-2 border-b border-slate-800">
+          <div className="flex items-center gap-2 mb-1.5">
+            <MapPin size={12} className="text-slate-500 shrink-0" />
+            <span className="text-xs text-slate-500 font-medium">Stand</span>
+          </div>
+          <select
+            value={locationFilter === '' ? '' : locationFilter}
+            onChange={e => setLocationFilter(e.target.value === '' ? '' : Number(e.target.value))}
+            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          >
+            <option value="">Toate standurile</option>
+            {stands.map((stand: Location) => (
+              <option key={stand.id} value={stand.id}>
+                {stand.name} — {stand.city}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Lista notificări (filtrată) */}
       <div className="max-h-96 overflow-y-auto">
-        {notifications.length === 0 ? (
+        {filteredNotifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mb-3">
               <Bell size={18} className="text-slate-600" />
             </div>
-            <p className="text-sm text-slate-500">Nicio notificare</p>
-            <p className="text-xs text-slate-600 mt-1">Totul e în ordine!</p>
+            <p className="text-sm text-slate-500">
+              {filter === 'all' && locationFilter === ''
+                ? 'Nicio notificare'
+                : locationFilter !== ''
+                  ? 'Nicio notificare pentru acest stand'
+                  : `Nicio notificare ${filter === 'critical' ? 'critică' : filter === 'warning' ? 'de atenție' : 'de tip info'}`}
+            </p>
+            <p className="text-xs text-slate-600 mt-1">
+              {filter === 'all' && locationFilter === ''
+                ? 'Totul e în ordine!'
+                : 'Alege alt filtru sau Toate.'}
+            </p>
           </div>
         ) : (
           <div className="p-3 space-y-2">
-            {notifications.map(n => (
+            {filteredNotifications.map(n => (
               <NotificationItem
                 key={n.id}
                 notification={n}

@@ -96,7 +96,7 @@ router.get('/', async (req, res) => {
         message: `${s.products?.name} → ${s.to?.name}: ${s.suggested_qty} buc recomandate`,
         location: s.to?.city,
         product: s.products?.name,
-        metadata: { suggestion_id: s.id },
+        metadata: { suggestion_id: s.id, to_location_id: s.to_location_id },
         created_at: s.created_at,
         action_url: `/suggestions`,
       })
@@ -183,7 +183,7 @@ router.get('/', async (req, res) => {
         message: `${m.products?.name} — ${m.quantity} buc în drum spre ${m.to?.name}`,
         location: m.to?.city,
         product: m.products?.name,
-        metadata: { movement_id: m.id },
+        metadata: { movement_id: m.id, to_location_id: m.to_location_id },
         created_at: m.created_at,
         action_url: `/movements`,
       })
