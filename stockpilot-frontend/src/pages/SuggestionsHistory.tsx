@@ -88,7 +88,79 @@ export default function SuggestionsHistory() {
   const stands     = locations?.filter(l => l.type === 'stand') ?? []
   const suggestions = history ?? []
 
-  const isUrgent = (reason: string) => reason?.includes('[URGENT]')
+  const isUrgent = (reason: string) => reason?.includes('[URGENT]') || reason?.includes('[CRITIC]')
+
+  /** Formatează reason-ul sugestiei: dacă e JSON (format algoritm nou), îl transformă în text lizibil; altfel returnează textul curățat. */
+  function formatReason(raw: string | null | undefined): string {
+    if (!raw || typeof raw !== 'string') return ''
+    const trimmed = raw.trim()
+    if (!trimmed) return ''
+
+    // Dacă nu e JSON, returnăm textul fără tag-uri de urgență
+    if (trimmed[0] !== '{' && trimmed[0] !== '[') {
+      return trimmed.replace(/\[URGENT\]\s*/g, '').replace(/\[NORMAL\]\s*/g, '').replace(/\[CRITIC\]\s*/g, '')
+    }
+
+    try {
+      const data = JSON.parse(trimmed) as Record<string, unknown>
+      // Dacă e array (format vechi/alt), nu afișăm JSON brut
+      if (Array.isArray(data)) return 'Sugestie generată de algoritm (detalii tehnice).'
+
+      if (data.type === 'deficit') {
+        const destName = String(data.destName ?? '')
+        const destCity = String(data.destCity ?? '')
+        const productName = String(data.productName ?? '')
+        const daysRemaining = typeof data.daysRemaining === 'number' ? Math.round(data.daysRemaining) : '?'
+        const currentQty = data.currentQty ?? '?'
+        const safetyStock = data.safetyStock ?? '?'
+        const soldLast30Days = data.soldLast30Days ?? '?'
+        const dailySales = typeof data.dailySales === 'number' ? data.dailySales.toFixed(1) : '?'
+
+        let line1 = `${destName}${destCity ? ` (${destCity})` : ''} — stoc ${Number(data.currentQty) <= Number(data.safetyStock) ? 'critic' : 'scăzut'} (${currentQty} buc, minim ${safetyStock}).`
+        if (daysRemaining !== '?') {
+          line1 += ` Zile până la epuizare: ${daysRemaining}.`
+        }
+        line1 += ` Vânzări 30 zile: ${soldLast30Days} (≈ ${dailySales}/zi).`
+
+        const sourceReason = data.sourceReason
+        if (sourceReason != null && sourceReason !== '') {
+          const src = typeof sourceReason === 'string'
+            ? (() => { try { return JSON.parse(sourceReason) } catch { return null } })()
+            : sourceReason
+          if (src && typeof src === 'object' && !Array.isArray(src)) {
+            const type = (src as Record<string, unknown>).type
+            if (type === 'surplus') {
+              const s = src as Record<string, unknown>
+              const sourceName = String(s.sourceName ?? '')
+              const sourceCity = String(s.sourceCity ?? '')
+              const sourceQty = s.sourceQty ?? '?'
+              const surplusDays = s.surplus_days ?? '?'
+              const cost = typeof s.cost === 'number' ? s.cost.toFixed(2) : s.cost
+              const leadTime = s.leadTime ?? '?'
+              line1 += ` Transfer de la ${sourceName}${sourceCity ? ` (${sourceCity})` : ''} — ${sourceQty} buc, surplus ${surplusDays} zile. Cost: ${cost} RON, livrare ${leadTime} zile.`
+            } else {
+              const cost = typeof (src as Record<string, unknown>).cost === 'number'
+                ? (src as Record<string, unknown>).cost?.toFixed(2) : '?'
+              line1 += ` Cost transport: ${cost} RON.`
+            }
+          }
+        }
+        return line1
+      }
+
+      // Alt tip de obiect JSON: încercăm un text generic
+      if (data.productName) {
+        let t = `${data.productName}`
+        if (data.destName) t += ` → ${data.destName}`
+        if (data.cost != null) t += `. Cost: ${Number(data.cost).toFixed(2)} RON`
+        return t + '.'
+      }
+      return 'Sugestie generată de algoritm (detalii tehnice).'
+    } catch {
+      // JSON invalid sau format necunoscut — nu afișăm JSON brut
+      return 'Sugestie generată de algoritm (detalii tehnice).'
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -214,7 +286,7 @@ export default function SuggestionsHistory() {
                     {/* Motivul sugestiei */}
                     {s.reason && (
                       <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                        {s.reason.replace('[URGENT] ', '').replace('[NORMAL] ', '')}
+                        {formatReason(s.reason)}
                       </p>
                     )}
                   </div>

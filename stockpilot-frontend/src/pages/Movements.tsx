@@ -4,14 +4,15 @@ import { movementsApi, type MovementSourceCandidate } from '../services/api'
 import { CheckCircle, Clock, XCircle, Truck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   pending:    { label: 'În așteptare', icon: <Clock size={13} />,        color: 'text-orange-400 bg-orange-500/10' },
   in_transit: { label: 'În tranzit',   icon: <Truck size={13} />,        color: 'text-blue-400 bg-blue-500/10' },
   completed:  { label: 'Finalizat',    icon: <CheckCircle size={13} />,  color: 'text-emerald-400 bg-emerald-500/10' },
   cancelled:  { label: 'Anulat',       icon: <XCircle size={13} />,      color: 'text-red-400 bg-red-500/10' },
 }
+const defaultStatus = statusConfig.pending
 
-const typeLabels = {
+const typeLabels: Record<string, string> = {
   transfer:       'Transfer intern',
   supplier_order: 'Comandă furnizor',
   adjustment:     'Ajustare',
@@ -37,7 +38,7 @@ export default function Movements() {
     quantities: {},
   })
 
-  const { data: movements, isLoading } = useQuery({
+  const { data: movements, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['movements', statusFilter, user?.location_id],
     queryFn: () =>
       movementsApi.getAll(
@@ -160,12 +161,26 @@ export default function Movements() {
                 <tr>
                   <td colSpan={8} className="text-center py-12 text-slate-500">Se încarcă...</td>
                 </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-12">
+                    <p className="text-slate-400 mb-2">Eroare la încărcarea mișcărilor.</p>
+                    <p className="text-slate-500 text-sm mb-3">{error instanceof Error ? error.message : 'Eroare necunoscută'}</p>
+                    <button
+                      onClick={() => refetch()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white"
+                    >
+                      Reîncearcă
+                    </button>
+                  </td>
+                </tr>
               ) : movements?.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-12 text-slate-500">Nu există mișcări</td>
                 </tr>
-              ) : movements?.map(m => {
-                const status = statusConfig[m.status]
+              ) : (movements ?? []).map(m => {
+                const status = (statusConfig[m.status] ?? defaultStatus)
+                const typeLabel = typeLabels[m.movement_type] ?? m.movement_type ?? '—'
                 return (
                   <tr key={m.id} className="hover:bg-slate-800/50 transition-colors">
                     <td className="px-5 py-3.5 font-medium text-slate-200">{m.products?.name}</td>
@@ -175,7 +190,7 @@ export default function Movements() {
                     <td className="px-5 py-3.5 text-slate-400">{m.to?.name}</td>
                     <td className="px-5 py-3.5">
                       <span className="text-xs text-slate-500">
-                        {typeLabels[m.movement_type]}
+                        {typeLabel}
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-right font-bold text-slate-100">
