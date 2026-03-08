@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import supabase from '../config/supabase.js'
 import { logAction } from '../services/audit.js'
-import { authenticate } from '../middleware/auth.js' 
+import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -10,15 +10,17 @@ router.use(authenticate)
 // Câmpurile permise + valorile lor default
 // Sursa unică de adevăr — folosită la validare, GET fallback și reset
 const DEFAULTS = {
-  lead_time_days:          2,
-  safety_stock_multiplier: 1.0,
-  reorder_threshold_days:  7,
-  surplus_threshold_days:  45,
-  max_transfer_qty:        100,
-  auto_suggestions:        true,
-  stale_days_threshold:    60,    // zile fără vânzări → stoc mort
-  storage_capacity:        9999,  // buc totale max per stand (9999 = nelimitat)
-  notes:                   '',
+  lead_time_days:           2,
+  safety_stock_multiplier:  1.0,
+  reorder_threshold_days:   7,
+  surplus_threshold_days:   45,
+  min_transfer_qty:         5,    // cantitate minimă per transfer (sub asta nu merită logistic)
+  max_transfer_qty:         100,
+  max_transport_cost_ratio: 0.25, // transport maxim ca % din valoarea mărfii (0.25 = 25%)
+  auto_suggestions:         true,
+  stale_days_threshold:     60,   // zile fără vânzări → stoc mort
+  storage_capacity:         9999, // buc totale max per stand (9999 = nelimitat)
+  notes:                    '',
 }
 
 // ─────────────────────────────────────────────
@@ -55,8 +57,10 @@ router.get('/:location_id', async (req, res) => {
   // (pentru rânduri create înainte de migrare)
   res.json({
     ...data,
-    stale_days_threshold: data.stale_days_threshold ?? DEFAULTS.stale_days_threshold,
-    storage_capacity:     data.storage_capacity     ?? DEFAULTS.storage_capacity,
+    stale_days_threshold:     data.stale_days_threshold     ?? DEFAULTS.stale_days_threshold,
+    storage_capacity:         data.storage_capacity         ?? DEFAULTS.storage_capacity,
+    min_transfer_qty:         data.min_transfer_qty         ?? DEFAULTS.min_transfer_qty,
+    max_transport_cost_ratio: data.max_transport_cost_ratio ?? DEFAULTS.max_transport_cost_ratio,
   })
 })
 
@@ -70,7 +74,9 @@ router.put('/:location_id', async (req, res) => {
     safety_stock_multiplier,
     reorder_threshold_days,
     surplus_threshold_days,
+    min_transfer_qty,
     max_transfer_qty,
+    max_transport_cost_ratio,
     auto_suggestions,
     stale_days_threshold,
     storage_capacity,
@@ -90,12 +96,23 @@ router.put('/:location_id', async (req, res) => {
   if (storage_capacity != null && (storage_capacity < 1 || storage_capacity > 99999))
     return res.status(400).json({ error: 'Capacitatea trebuie să fie între 1 și 99999 unități' })
 
+  if (min_transfer_qty != null && (min_transfer_qty < 1 || min_transfer_qty > 500))
+    return res.status(400).json({ error: 'Cantitatea minimă transfer trebuie să fie între 1 și 500' })
+
+  if (max_transfer_qty != null && min_transfer_qty != null && max_transfer_qty < min_transfer_qty)
+    return res.status(400).json({ error: 'Cantitatea maximă trebuie să fie ≥ cantitatea minimă' })
+
+  if (max_transport_cost_ratio != null && (max_transport_cost_ratio < 0.05 || max_transport_cost_ratio > 1))
+    return res.status(400).json({ error: 'Pragul cost transport trebuie să fie între 5% și 100%' })
+
   const updates = {
     lead_time_days,
     safety_stock_multiplier,
     reorder_threshold_days,
     surplus_threshold_days,
+    min_transfer_qty,
     max_transfer_qty,
+    max_transport_cost_ratio,
     auto_suggestions,
     stale_days_threshold,
     storage_capacity,
@@ -127,8 +144,10 @@ router.put('/:location_id', async (req, res) => {
 
   res.json({
     ...data,
-    stale_days_threshold: data.stale_days_threshold ?? DEFAULTS.stale_days_threshold,
-    storage_capacity:     data.storage_capacity     ?? DEFAULTS.storage_capacity,
+    stale_days_threshold:     data.stale_days_threshold     ?? DEFAULTS.stale_days_threshold,
+    storage_capacity:         data.storage_capacity         ?? DEFAULTS.storage_capacity,
+    min_transfer_qty:         data.min_transfer_qty         ?? DEFAULTS.min_transfer_qty,
+    max_transport_cost_ratio: data.max_transport_cost_ratio ?? DEFAULTS.max_transport_cost_ratio,
   })
 })
 
