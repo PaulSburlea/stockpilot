@@ -12,22 +12,25 @@ router.use(authenticate)
 router.post('/', async (req, res) => {
   const { location_id, product_id, quantity } = req.body
 
-  // 1. Verifică că există suficient stoc
-  const { data: stockRow, error: stockError } = await supabase
-    .from('stock')
-    .select('*')
-    .eq('location_id', location_id)
-    .eq('product_id', product_id)
-    .single()
+  // 1. Decrementare atomică — verifică și scade stocul într-o singură operație
+  const { data: decremented, error: decError } = await supabase
+    .rpc('decrement_stock', {
+      p_location_id: location_id,
+      p_product_id: product_id,
+      p_quantity: quantity,
+    })
 
-  if (stockError || !stockRow) {
-    return res.status(404).json({ error: 'Stock record not found' })
-  }
+  if (decError) return res.status(500).json({ error: decError.message })
 
-  if (stockRow.quantity < quantity) {
-    return res.status(400).json({ 
+  if (!decremented) {
+    // Stoc insuficient — citim cantitatea curentă pentru mesaj
+    const { data: stockRow } = await supabase
+      .from('stock').select('quantity')
+      .eq('location_id', location_id).eq('product_id', product_id).single()
+
+    return res.status(400).json({
       error: 'Insufficient stock',
-      available: stockRow.quantity 
+      available: stockRow?.quantity ?? 0,
     })
   }
 
@@ -40,16 +43,12 @@ router.post('/', async (req, res) => {
 
   if (saleError) return res.status(500).json({ error: saleError.message })
 
-  // 3. Scade din stoc
-  const { error: updateError } = await supabase
-    .from('stock')
-    .update({ 
-      quantity: stockRow.quantity - quantity,
-      updated_at: new Date()
-    })
-    .eq('id', stockRow.id)
+  // Citim stocul actualizat pentru log + răspuns
+  const { data: updatedStock } = await supabase
+    .from('stock').select('quantity')
+    .eq('location_id', location_id).eq('product_id', product_id).single()
 
-  if (updateError) return res.status(500).json({ error: updateError.message })
+  const newStock = updatedStock?.quantity ?? 0
 
   await logAction({
     user: req.user,
@@ -57,11 +56,11 @@ router.post('/', async (req, res) => {
     entity: 'sale',
     entityId: sale.id,
     description: `Vânzare înregistrată: ${quantity} buc — produs ID ${product_id} la locația ID ${location_id}`,
-    metadata: { product_id, location_id, quantity, new_stock: stockRow.quantity - quantity },
+    metadata: { product_id, location_id, quantity, new_stock: newStock },
     req,
   })
 
-  res.status(201).json({ sale, new_stock: stockRow.quantity - quantity })
+  res.status(201).json({ sale, new_stock: newStock })
 })
 
 // GET /api/sales/analytics — vânzări agregate pentru dashboard

@@ -222,28 +222,25 @@ router.patch('/:id/accept', authorize('admin', 'warehouse_manager'), async (req,
     if (locErr || !sourceLocation) return res.status(400).json({ error: 'Locația sursă negăsită' })
 
     if (sourceLocation.type === 'warehouse') {
-      // ── SURSĂ DEPOZIT → verifică stoc, scade, marchează in_transit ──────────
-      const { data: sourceStock } = await supabase
-        .from('stock')
-        .select('quantity')
-        .eq('location_id', fromId)
-        .eq('product_id', movement.product_id)
-        .single()
+      // ── SURSĂ DEPOZIT → decrementare atomică + marchează in_transit ──────────
+      const { data: decremented, error: decErr } = await supabase
+        .rpc('decrement_stock', {
+          p_location_id: fromId,
+          p_product_id: movement.product_id,
+          p_quantity: movement.quantity,
+        })
 
-      const available = sourceStock?.quantity ?? 0
-      if (available < movement.quantity) {
+      if (decErr) return res.status(500).json({ error: decErr.message })
+
+      if (!decremented) {
+        const { data: sourceStock } = await supabase
+          .from('stock').select('quantity')
+          .eq('location_id', fromId).eq('product_id', movement.product_id).single()
+
         return res.status(400).json({
-          error: `Stoc insuficient în depozit. Disponibil: ${available}, necesar: ${movement.quantity}`
+          error: `Stoc insuficient în depozit. Disponibil: ${sourceStock?.quantity ?? 0}, necesar: ${movement.quantity}`
         })
       }
-
-      const { error: stockErr } = await supabase
-        .from('stock')
-        .update({ quantity: available - movement.quantity })
-        .eq('location_id', fromId)
-        .eq('product_id', movement.product_id)
-
-      if (stockErr) return res.status(500).json({ error: stockErr.message })
 
       const { data: updated, error: updateErr } = await supabase
         .from('stock_movements')
@@ -340,29 +337,25 @@ router.patch('/:id/pickup', async (req, res) => {
       return res.status(403).json({ error: 'Nu poți confirma expedierea pentru alt stand' })
     }
 
-    // Verifică stoc disponibil
-    const { data: sourceStock } = await supabase
-      .from('stock')
-      .select('quantity')
-      .eq('location_id', movement.from_location_id)
-      .eq('product_id', movement.product_id)
-      .single()
+    // Decrementare atomică din Stand B
+    const { data: decremented, error: decErr } = await supabase
+      .rpc('decrement_stock', {
+        p_location_id: movement.from_location_id,
+        p_product_id: movement.product_id,
+        p_quantity: movement.quantity,
+      })
 
-    const available = sourceStock?.quantity ?? 0
-    if (available < movement.quantity) {
+    if (decErr) return res.status(500).json({ error: decErr.message })
+
+    if (!decremented) {
+      const { data: sourceStock } = await supabase
+        .from('stock').select('quantity')
+        .eq('location_id', movement.from_location_id).eq('product_id', movement.product_id).single()
+
       return res.status(400).json({
-        error: `Stoc insuficient. Disponibil: ${available}, necesar: ${movement.quantity}. Contactează managerul de depozit.`
+        error: `Stoc insuficient. Disponibil: ${sourceStock?.quantity ?? 0}, necesar: ${movement.quantity}. Contactează managerul de depozit.`
       })
     }
-
-    // Scade din Stand B
-    const { error: stockErr } = await supabase
-      .from('stock')
-      .update({ quantity: available - movement.quantity })
-      .eq('location_id', movement.from_location_id)
-      .eq('product_id', movement.product_id)
-
-    if (stockErr) return res.status(500).json({ error: stockErr.message })
 
     const { data: updated, error: updateErr } = await supabase
       .from('stock_movements')
@@ -424,19 +417,13 @@ router.patch('/:id/receive', async (req, res) => {
       return res.status(403).json({ error: 'Nu poți confirma primirea pentru alt stand' })
     }
 
-    // Adaugă stoc la destinație
-    const { data: toStock } = await supabase
-      .from('stock')
-      .select('quantity')
-      .eq('location_id', movement.to_location_id)
-      .eq('product_id', movement.product_id)
-      .single()
-
+    // Incrementare atomică la destinație
     const { error: stockErr } = await supabase
-      .from('stock')
-      .update({ quantity: (toStock?.quantity ?? 0) + movement.quantity })
-      .eq('location_id', movement.to_location_id)
-      .eq('product_id', movement.product_id)
+      .rpc('increment_stock', {
+        p_location_id: movement.to_location_id,
+        p_product_id: movement.product_id,
+        p_quantity: movement.quantity,
+      })
 
     if (stockErr) return res.status(500).json({ error: stockErr.message })
 

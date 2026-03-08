@@ -472,23 +472,53 @@ export const notificationsApi = {
 }
 
 // ── Export ─────────────────────────────────────────────────
+// Helper — descarcă un CSV autentificat (fetch cu Bearer token + blob download)
+async function downloadCSV(endpoint: string) {
+  const token = localStorage.getItem('token')
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Export failed')
+  }
+
+  const blob = await res.blob()
+
+  // Extrage filename din Content-Disposition header
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/)
+  const filename = filenameMatch?.[1] ?? 'export.csv'
+
+  // Trigger download
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 export const exportApi = {
   downloadStock: (location_id?: number) => {
     const query = location_id ? `?location_id=${location_id}` : ''
-    window.open(`${import.meta.env.VITE_API_URL}/export/stock${query}`, '_blank')
+    return downloadCSV(`/export/stock${query}`)
   },
   downloadSales: (days: 30 | 60 | 90 = 30, location_id?: number) => {
     const query = new URLSearchParams({ days: String(days) })
     if (location_id) query.set('location_id', String(location_id))
-    window.open(`${import.meta.env.VITE_API_URL}/export/sales?${query}`, '_blank')
+    return downloadCSV(`/export/sales?${query}`)
   },
   downloadMovements: (status?: string) => {
     const query = status ? `?status=${status}` : ''
-    window.open(`${import.meta.env.VITE_API_URL}/export/movements${query}`, '_blank')
+    return downloadCSV(`/export/movements${query}`)
   },
   downloadSummary: (location_id?: number) => {
     const query = location_id ? `?location_id=${location_id}` : ''
-    window.open(`${import.meta.env.VITE_API_URL}/export/summary${query}`, '_blank')
+    return downloadCSV(`/export/summary${query}`)
   },
 }
 
