@@ -1,10 +1,52 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { stockApi, locationsApi, type CriticalStandItem, suggestionsApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { Search, AlertTriangle } from 'lucide-react'
+import { Search, AlertTriangle, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sort helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SortField = 'name' | 'quantity' | 'status' | 'location'
+type SortDir   = 'asc' | 'desc'
+
+const STATUS_ORDER: Record<string, number> = {
+  'Critic':  0,
+  'Scăzut':  1,
+  'Normal':  2,
+  'Surplus': 3,
+}
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
+  if (sortField !== field) return <ChevronsUpDown size={13} className="text-slate-600 ml-1 inline" />
+  return sortDir === 'asc'
+    ? <ChevronUp size={13} className="text-violet-400 ml-1 inline" />
+    : <ChevronDown size={13} className="text-violet-400 ml-1 inline" />
+}
+
+function SortableTh({
+  field, label, sortField, sortDir, onSort, className = '',
+}: {
+  field: SortField; label: string; sortField: SortField; sortDir: SortDir
+  onSort: (f: SortField) => void; className?: string
+}) {
+  return (
+    <th
+      onClick={() => onSort(field)}
+      className={`px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-300 transition-colors ${className}`}
+    >
+      {label}
+      <SortIcon field={field} sortField={sortField} sortDir={sortDir} />
+    </th>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Stock() {
   const { user } = useAuth()
@@ -15,6 +57,8 @@ export default function Stock() {
   const [criticalItems, setCriticalItems] = useState<CriticalStandItem[]>([])
   const [requestQuantities, setRequestQuantities] = useState<Record<number, number>>({})
   const [isLoadingRequests, setIsLoadingRequests] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('status')
+  const [sortDir, setSortDir]   = useState<SortDir>('asc')
 
   const { data: locations } = useQuery({
     queryKey: ['locations'],
@@ -30,18 +74,49 @@ export default function Stock() {
     ),
   })
 
-  const filtered = stock?.filter(item =>
-    item.products?.name.toLowerCase().includes(search.toLowerCase()) ||
-    item.products?.sku.toLowerCase().includes(search.toLowerCase()) ||
-    item.locations?.city.toLowerCase().includes(search.toLowerCase())
-  ) ?? []
-
   const getStockStatus = (quantity: number, safety: number) => {
-    if (quantity <= safety) return { label: 'Critic', color: 'text-red-400 bg-red-500/10' }
-    if (quantity <= safety * 2) return { label: 'Scăzut', color: 'text-orange-400 bg-orange-500/10' }
-    if (quantity >= safety * 8) return { label: 'Surplus', color: 'text-blue-400 bg-blue-500/10' }
-    return { label: 'Normal', color: 'text-emerald-400 bg-emerald-500/10' }
+    if (quantity <= safety)      return { label: 'Critic',  color: 'text-red-400 bg-red-500/10' }
+    if (quantity <= safety * 2)  return { label: 'Scăzut',  color: 'text-orange-400 bg-orange-500/10' }
+    if (quantity >= safety * 8)  return { label: 'Surplus', color: 'text-blue-400 bg-blue-500/10' }
+    return                              { label: 'Normal',  color: 'text-emerald-400 bg-emerald-500/10' }
   }
+
+  // ── Toggle sort ──────────────────────────────────────────────────────────────
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
+
+  // ── Filter + sort ────────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const searched = (stock ?? []).filter(item =>
+      item.products?.name.toLowerCase().includes(search.toLowerCase()) ||
+      item.products?.sku.toLowerCase().includes(search.toLowerCase()) ||
+      item.locations?.city.toLowerCase().includes(search.toLowerCase())
+    )
+
+    return [...searched].sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'name') {
+        cmp = (a.products?.name ?? '').localeCompare(b.products?.name ?? '', 'ro')
+      } else if (sortField === 'quantity') {
+        cmp = Number(a.quantity) - Number(b.quantity)
+      } else if (sortField === 'status') {
+        const sa = STATUS_ORDER[getStockStatus(Number(a.quantity), Number(a.safety_stock)).label] ?? 99
+        const sb = STATUS_ORDER[getStockStatus(Number(b.quantity), Number(b.safety_stock)).label] ?? 99
+        cmp = sa - sb
+      } else if (sortField === 'location') {
+        cmp = (a.locations?.name ?? '').localeCompare(b.locations?.name ?? '', 'ro')
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [stock, search, sortField, sortDir])
+
+  // ── Modal helpers ────────────────────────────────────────────────────────────
 
   const openRequestModal = async () => {
     if (!user?.location_id) return
@@ -50,9 +125,7 @@ export default function Stock() {
       const data = await stockApi.getCriticalForStand(user.location_id)
       setCriticalItems(data)
       const initial: Record<number, number> = {}
-      data.forEach(item => {
-        initial[item.product_id] = item.min_request_qty
-      })
+      data.forEach(item => { initial[item.product_id] = item.min_request_qty })
       setRequestQuantities(initial)
       setIsRequestModalOpen(true)
     } catch (err) {
@@ -71,11 +144,7 @@ export default function Stock() {
 
   const removeRequestItem = (productId: number) => {
     setCriticalItems(prev => prev.filter(item => item.product_id !== productId))
-    setRequestQuantities(prev => {
-      const next = { ...prev }
-      delete next[productId]
-      return next
-    })
+    setRequestQuantities(prev => { const next = { ...prev }; delete next[productId]; return next })
   }
 
   const sendRequest = async () => {
@@ -83,17 +152,12 @@ export default function Stock() {
       setIsRequestModalOpen(false)
       return
     }
-
     const items = criticalItems.map(item => ({
       product_id: item.product_id,
       quantity: requestQuantities[item.product_id] ?? item.min_request_qty,
     }))
-
     try {
-      await suggestionsApi.createFromStand({
-        location_id: user.location_id,
-        items,
-      })
+      await suggestionsApi.createFromStand({ location_id: user.location_id, items })
       setIsRequestModalOpen(false)
       alert('Cererea a fost trimisă către depozit.')
     } catch (err) {
@@ -102,15 +166,16 @@ export default function Stock() {
     }
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-5">
-      {/* Header + acțiuni */}
+
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-slate-100">Stocuri</h1>
-          <p className="text-xs text-slate-500">
-            Vizualizează stocurile pe produse și locații.
-          </p>
+          <p className="text-xs text-slate-500">Vizualizează stocurile pe produse și locații.</p>
         </div>
         {user?.role === 'stand_manager' && (
           <button
@@ -135,7 +200,6 @@ export default function Stock() {
             className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
         </div>
-
         {user?.role !== 'stand_manager' && (
           <select
             value={selectedLocation}
@@ -156,62 +220,41 @@ export default function Stock() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
-                <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Produs</th>
+                <SortableTh field="name"     label="Produs"     sortField={sortField} sortDir={sortDir} onSort={handleSort} className="text-left" />
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">SKU</th>
-                <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Locație</th>
-                <th className="text-right px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Cantitate</th>
+                <SortableTh field="location" label="Locație"    sortField={sortField} sortDir={sortDir} onSort={handleSort} className="text-left" />
+                <SortableTh field="quantity" label="Cantitate"  sortField={sortField} sortDir={sortDir} onSort={handleSort} className="text-right" />
                 <th className="text-right px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Stoc minim</th>
-                <th className="text-center px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="px-5 py-3.5"></th>
+                <SortableTh field="status"   label="Status"     sortField={sortField} sortDir={sortDir} onSort={handleSort} className="text-center" />
+                <th className="px-5 py-3.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-500">
-                    Se încarcă...
-                  </td>
-                </tr>
+                <tr><td colSpan={7} className="text-center py-12 text-slate-500">Se încarcă...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-500">
-                    Nu există rezultate
-                  </td>
-                </tr>
+                <tr><td colSpan={7} className="text-center py-12 text-slate-500">Nu există rezultate</td></tr>
               ) : filtered.map(item => {
-                const status = getStockStatus(item.quantity, item.safety_stock)
+                const status = getStockStatus(Number(item.quantity), Number(item.safety_stock))
                 return (
                   <tr key={item.id} className="hover:bg-slate-800/50 transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2">
-                        {item.quantity <= item.safety_stock && (
+                        {Number(item.quantity) <= Number(item.safety_stock) && (
                           <AlertTriangle size={14} className="text-red-400 shrink-0" />
                         )}
-                        <span className="font-medium text-slate-200">
-                          {item.products?.name}
-                        </span>
+                        <span className="font-medium text-slate-200">{item.products?.name}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-500 font-mono text-xs">
-                      {item.products?.sku}
-                    </td>
+                    <td className="px-5 py-3.5 text-slate-500 font-mono text-xs">{item.products?.sku}</td>
                     <td className="px-5 py-3.5">
-                      <Link
-                        to={`/locations/${item.location_id}`}
-                        className="group"
-                      >
-                        <p className="text-slate-300 group-hover:text-violet-400 transition-colors">
-                          {item.locations?.name}
-                        </p>
+                      <Link to={`/locations/${item.location_id}`} className="group">
+                        <p className="text-slate-300 group-hover:text-violet-400 transition-colors">{item.locations?.name}</p>
                         <p className="text-xs text-slate-500">{item.locations?.city}</p>
                       </Link>
                     </td>
-                    <td className="px-5 py-3.5 text-right font-bold text-slate-100">
-                      {item.quantity}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-slate-500">
-                      {item.safety_stock}
-                    </td>
+                    <td className="px-5 py-3.5 text-right font-bold text-slate-100">{item.quantity}</td>
+                    <td className="px-5 py-3.5 text-right text-slate-500">{item.safety_stock}</td>
                     <td className="px-5 py-3.5 text-center">
                       <span className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${status.color}`}>
                         {status.label}
@@ -232,10 +275,18 @@ export default function Stock() {
           </table>
         </div>
 
-        {/* Footer tabel */}
         {filtered.length > 0 && (
           <div className="px-5 py-3 border-t border-slate-800 text-xs text-slate-500">
             {filtered.length} înregistrări
+            {sortField && (
+              <span className="ml-2 text-slate-600">
+                · sortat după <span className="text-slate-500">{
+                  sortField === 'name' ? 'produs' :
+                  sortField === 'quantity' ? 'cantitate' :
+                  sortField === 'location' ? 'locație' : 'status'
+                }</span> ({sortDir === 'asc' ? '↑' : '↓'})
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -251,18 +302,11 @@ export default function Stock() {
                   Produsele afișate sunt în stoc critic sau scăzut în acest stand. Poți ajusta cantitățile sau elimina produse înainte de trimitere.
                 </p>
               </div>
-              <button
-                onClick={() => setIsRequestModalOpen(false)}
-                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
-              >
-                ×
-              </button>
+              <button onClick={() => setIsRequestModalOpen(false)} className="text-slate-500 hover:text-slate-300 text-lg leading-none">×</button>
             </div>
 
             {criticalItems.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                Nu există produse în stoc critic pentru acest stand.
-              </p>
+              <p className="text-sm text-slate-400">Nu există produse în stoc critic pentru acest stand.</p>
             ) : (
               <div className="border border-slate-800 rounded-xl overflow-hidden mb-4">
                 <div className="overflow-x-auto">
@@ -272,7 +316,7 @@ export default function Stock() {
                         <th className="px-4 py-2 text-left text-slate-500 uppercase tracking-wider">Produs</th>
                         <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Stoc curent</th>
                         <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Vândut 30 zile</th>
-                        <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate minimă cerere</th>
+                        <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate minimă</th>
                         <th className="px-4 py-2 text-right text-slate-500 uppercase tracking-wider">Cantitate cerută</th>
                         <th className="px-4 py-2 text-center text-slate-500 uppercase tracking-wider">Acțiuni</th>
                       </tr>
@@ -284,23 +328,15 @@ export default function Stock() {
                             <div className="font-medium">{item.products?.name}</div>
                             <div className="text-[11px] text-slate-500">{item.products?.sku}</div>
                           </td>
-                          <td className="px-4 py-2 text-right text-slate-100">
-                            {item.quantity}
-                          </td>
-                          <td className="px-4 py-2 text-right text-slate-100">
-                            {item.sold_last_30_days}
-                          </td>
-                          <td className="px-4 py-2 text-right text-emerald-400 font-semibold">
-                            {item.min_request_qty}
-                          </td>
+                          <td className="px-4 py-2 text-right text-slate-100">{item.quantity}</td>
+                          <td className="px-4 py-2 text-right text-slate-100">{item.sold_last_30_days}</td>
+                          <td className="px-4 py-2 text-right text-emerald-400 font-semibold">{item.min_request_qty}</td>
                           <td className="px-4 py-2 text-right">
                             <input
                               type="number"
                               min={item.min_request_qty}
                               value={requestQuantities[item.product_id] ?? item.min_request_qty}
-                              onChange={e =>
-                                handleQuantityChange(item.product_id, item.min_request_qty, e.target.value)
-                              }
+                              onChange={e => handleQuantityChange(item.product_id, item.min_request_qty, e.target.value)}
                               className="w-24 px-2 py-1 bg-slate-900 border border-slate-700 rounded-md text-right text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-violet-500"
                             />
                           </td>
@@ -321,10 +357,7 @@ export default function Stock() {
             )}
 
             <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsRequestModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-slate-300 hover:text-slate-100"
-              >
+              <button onClick={() => setIsRequestModalOpen(false)} className="px-4 py-2 text-xs font-medium text-slate-300 hover:text-slate-100">
                 Anulează
               </button>
               <button

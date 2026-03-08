@@ -1,10 +1,31 @@
 import { Router } from 'express'
 import supabase from '../config/supabase.js'
 import { logAction } from '../services/audit.js'
+import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
 
+router.use(authenticate)
+
+// Câmpurile permise + valorile lor default
+// Sursa unică de adevăr — folosită la validare, GET fallback și reset
+const DEFAULTS = {
+  lead_time_days:           2,
+  safety_stock_multiplier:  1.0,
+  reorder_threshold_days:   7,
+  surplus_threshold_days:   45,
+  min_transfer_qty:         5,    // cantitate minimă per transfer (sub asta nu merită logistic)
+  max_transfer_qty:         100,
+  max_transport_cost_ratio: 0.25, // transport maxim ca % din valoarea mărfii (0.25 = 25%)
+  auto_suggestions:         true,
+  stale_days_threshold:     60,   // zile fără vânzări → stoc mort
+  storage_capacity:         9999, // buc totale max per stand (9999 = nelimitat)
+  notes:                    '',
+}
+
+// ─────────────────────────────────────────────
 // GET /api/settings — toate setările
+// ─────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const { data, error } = await supabase
     .from('location_settings')
@@ -15,7 +36,9 @@ router.get('/', async (req, res) => {
   res.json(data)
 })
 
-// GET /api/settings/:location_id — setările unei locații
+// ─────────────────────────────────────────────
+// GET /api/settings/:location_id
+// ─────────────────────────────────────────────
 router.get('/:location_id', async (req, res) => {
   const { location_id } = req.params
 
@@ -26,23 +49,24 @@ router.get('/:location_id', async (req, res) => {
     .single()
 
   if (error) {
-    // Dacă nu există, returnează default-uri
-    return res.json({
-      location_id: Number(location_id),
-      lead_time_days: 2,
-      safety_stock_multiplier: 1.0,
-      reorder_threshold_days: 7,
-      surplus_threshold_days: 45,
-      max_transfer_qty: 100,
-      auto_suggestions: true,
-      notes: '',
-    })
+    // Rândul nu există încă — returnează default-uri cu location_id
+    return res.json({ location_id: Number(location_id), ...DEFAULTS })
   }
 
-  res.json(data)
+  // Completăm câmpurile noi cu default dacă sunt null
+  // (pentru rânduri create înainte de migrare)
+  res.json({
+    ...data,
+    stale_days_threshold:     data.stale_days_threshold     ?? DEFAULTS.stale_days_threshold,
+    storage_capacity:         data.storage_capacity         ?? DEFAULTS.storage_capacity,
+    min_transfer_qty:         data.min_transfer_qty         ?? DEFAULTS.min_transfer_qty,
+    max_transport_cost_ratio: data.max_transport_cost_ratio ?? DEFAULTS.max_transport_cost_ratio,
+  })
 })
 
-// PUT /api/settings/:location_id — actualizează setările
+// ─────────────────────────────────────────────
+// PUT /api/settings/:location_id
+// ─────────────────────────────────────────────
 router.put('/:location_id', async (req, res) => {
   const { location_id } = req.params
   const {
@@ -50,36 +74,60 @@ router.put('/:location_id', async (req, res) => {
     safety_stock_multiplier,
     reorder_threshold_days,
     surplus_threshold_days,
+    min_transfer_qty,
     max_transfer_qty,
+    max_transport_cost_ratio,
     auto_suggestions,
+    stale_days_threshold,
+    storage_capacity,
     notes,
   } = req.body
 
   // Validări
-  if (lead_time_days < 1 || lead_time_days > 30) {
+  if (lead_time_days != null && (lead_time_days < 1 || lead_time_days > 30))
     return res.status(400).json({ error: 'Lead time trebuie să fie între 1 și 30 zile' })
-  }
-  if (safety_stock_multiplier < 0.5 || safety_stock_multiplier > 5) {
+
+  if (safety_stock_multiplier != null && (safety_stock_multiplier < 0.5 || safety_stock_multiplier > 5))
     return res.status(400).json({ error: 'Multiplicatorul trebuie să fie între 0.5 și 5' })
-  }
+
+  if (stale_days_threshold != null && (stale_days_threshold < 7 || stale_days_threshold > 365))
+    return res.status(400).json({ error: 'Pragul de stoc mort trebuie să fie între 7 și 365 zile' })
+
+  if (storage_capacity != null && (storage_capacity < 1 || storage_capacity > 99999))
+    return res.status(400).json({ error: 'Capacitatea trebuie să fie între 1 și 99999 unități' })
+
+  if (min_transfer_qty != null && (min_transfer_qty < 1 || min_transfer_qty > 500))
+    return res.status(400).json({ error: 'Cantitatea minimă transfer trebuie să fie între 1 și 500' })
+
+  if (max_transfer_qty != null && min_transfer_qty != null && max_transfer_qty < min_transfer_qty)
+    return res.status(400).json({ error: 'Cantitatea maximă trebuie să fie ≥ cantitatea minimă' })
+
+  if (max_transport_cost_ratio != null && (max_transport_cost_ratio < 0.05 || max_transport_cost_ratio > 1))
+    return res.status(400).json({ error: 'Pragul cost transport trebuie să fie între 5% și 100%' })
 
   const updates = {
     lead_time_days,
     safety_stock_multiplier,
     reorder_threshold_days,
     surplus_threshold_days,
+    min_transfer_qty,
     max_transfer_qty,
+    max_transport_cost_ratio,
     auto_suggestions,
+    stale_days_threshold,
+    storage_capacity,
     notes,
     updated_at: new Date().toISOString(),
     updated_by: req.user?.name ?? 'System',
   }
 
-  // Upsert — creează dacă nu există, actualizează dacă există
+  // Elimină câmpurile undefined (nu suprascrie cu null ce nu s-a trimis)
+  Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k])
+
   const { data, error } = await supabase
     .from('location_settings')
-    .upsert({ location_id: Number(location_id), ...updates })
-    .select('*, locations(name, city)')
+    .upsert({ location_id: Number(location_id), ...updates }, { onConflict: 'location_id' })
+    .select('*, locations(name, city, type)')
     .single()
 
   if (error) return res.status(400).json({ error: error.message })
@@ -94,30 +142,32 @@ router.put('/:location_id', async (req, res) => {
     req,
   })
 
-  res.json(data)
+  res.json({
+    ...data,
+    stale_days_threshold:     data.stale_days_threshold     ?? DEFAULTS.stale_days_threshold,
+    storage_capacity:         data.storage_capacity         ?? DEFAULTS.storage_capacity,
+    min_transfer_qty:         data.min_transfer_qty         ?? DEFAULTS.min_transfer_qty,
+    max_transport_cost_ratio: data.max_transport_cost_ratio ?? DEFAULTS.max_transport_cost_ratio,
+  })
 })
 
-// POST /api/settings/reset/:location_id — resetează la default
+// ─────────────────────────────────────────────
+// POST /api/settings/reset/:location_id
+// ─────────────────────────────────────────────
 router.post('/reset/:location_id', async (req, res) => {
   const { location_id } = req.params
 
-  const defaults = {
+  const resetPayload = {
     location_id: Number(location_id),
-    lead_time_days: 2,
-    safety_stock_multiplier: 1.0,
-    reorder_threshold_days: 7,
-    surplus_threshold_days: 45,
-    max_transfer_qty: 100,
-    auto_suggestions: true,
-    notes: '',
+    ...DEFAULTS,
     updated_at: new Date().toISOString(),
     updated_by: req.user?.name ?? 'System',
   }
 
   const { data, error } = await supabase
     .from('location_settings')
-    .upsert(defaults)
-    .select()
+    .upsert(resetPayload, { onConflict: 'location_id' })
+    .select('*, locations(name, city, type)')
     .single()
 
   if (error) return res.status(400).json({ error: error.message })

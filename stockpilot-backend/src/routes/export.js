@@ -1,7 +1,10 @@
 import { Router } from 'express'
 import supabase from '../config/supabase.js'
+import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
+
+router.use(authenticate)
 
 // Helper — convertește array de obiecte în CSV
 function toCSV(data, columns) {

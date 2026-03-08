@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { stockApi, salesApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { AlertTriangle, TrendingUp, Package, MapPin, TrendingDown, Clock } from 'lucide-react'
+import { settingsApi } from '../services/api'
 
 type Period = 30 | 60 | 90
 
@@ -95,8 +96,8 @@ export default function DashboardStand() {
     queryFn: () => salesApi.getAnalytics(period, user!.location_id),
   })
 
-  const totalStock = allStock?.reduce((s, i) => s + i.quantity, 0) ?? 0
-  const totalSales = analytics?.reduce((s, i) => s + i.total_quantity, 0) ?? 0
+  const totalStock = allStock?.reduce((s, i) => s + Number(i.quantity), 0) ?? 0
+  const totalSales = analytics?.reduce((s, i) => s + Number(i.total_quantity), 0) ?? 0
   const visibleCritical = showAllCritical ? criticalStock : criticalStock?.slice(0, 5)
 
   const topSelling = [...(analytics ?? [])]
@@ -112,7 +113,7 @@ export default function DashboardStand() {
     .map(item => {
       const salesData = analytics?.find(a => a.product.id === item.product_id)
       const avgDaily = salesData?.avg_daily ?? 0
-      const daysLeft = avgDaily > 0 ? Math.floor(item.quantity / avgDaily) : null
+      const daysLeft = avgDaily > 0 ? Math.floor(Number(item.quantity) / avgDaily) : null
       return {
         name: item.products?.name ?? '',
         zile: daysLeft,
@@ -124,6 +125,20 @@ export default function DashboardStand() {
     })
     .sort((a, b) => (a.zile ?? 9999) - (b.zile ?? 9999))
     .slice(0, 10)
+
+  const { data: locationSettings } = useQuery({
+    queryKey: ['settings', user?.location_id],
+    queryFn: () => settingsApi.getByLocation(user!.location_id!),
+  })
+
+  // Query nou după celelalte
+  const { data: staleData } = useQuery({
+    queryKey: ['stock', 'stale-for-stand', user?.location_id],
+    queryFn: () => stockApi.getStaleForStand(user!.location_id!),
+  })
+
+  const staleItems     = staleData?.items ?? []
+  const staleThreshold = staleData?.stale_threshold_days ?? 60
 
   // Afișăm graficul doar dacă cel puțin 2 produse au date de vânzări
   const validCoverageItems = stockCoverage.filter(i => !i.noSales)
@@ -144,10 +159,23 @@ export default function DashboardStand() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           title="Stoc total stand"
-          value={totalStock.toLocaleString()}
+          value={
+            locationSettings?.storage_capacity && locationSettings.storage_capacity < 9999
+              ? `${totalStock} / ${locationSettings.storage_capacity}`
+              : totalStock.toLocaleString()
+          }
           icon={<Package size={18} className="text-blue-400" />}
           color="bg-blue-500/10"
-          subtitle="unități disponibile"
+          subtitle={
+            locationSettings?.storage_capacity && locationSettings.storage_capacity < 9999
+              ? `${Math.round((totalStock / locationSettings.storage_capacity) * 100)}% din capacitate`
+              : 'unități disponibile'
+          }
+          alert={
+            locationSettings?.storage_capacity
+              ? totalStock / locationSettings.storage_capacity > 0.9
+              : false
+          }
         />
         <StatCard
           title="Vânzări perioadă"
@@ -257,6 +285,57 @@ export default function DashboardStand() {
           )}
         </ChartCard>
       </div>
+
+      {staleItems.length > 0 && (
+        <div className="bg-slate-900 border border-amber-500/20 rounded-xl p-5">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Package size={16} className="text-amber-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-amber-400">
+                  Stoc blocat — nu se vinde
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Produse fără nicio vânzare în ultimele {staleThreshold} zile
+                </p>
+              </div>
+            </div>
+            <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
+              {staleItems.length} {staleItems.length === 1 ? 'produs' : 'produse'}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {staleItems.map(item => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between py-2.5 border-b border-slate-800 last:border-0"
+              >
+                <div>
+                  <p className="text-sm font-medium text-slate-200">{item.products?.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {item.last_sale_at
+                      ? `Ultima vânzare: ${new Date(item.last_sale_at).toLocaleDateString('ro-RO')}`
+                      : 'Niciodată vândut la acest stand'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-amber-400">{item.quantity} buc</span>
+                  <p className="text-xs text-slate-500">
+                    {item.days_since_last_sale === 9999
+                      ? '∞ zile blocate'
+                      : `${item.days_since_last_sale} zile blocate`}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-slate-600 mt-3 pt-3 border-t border-slate-800 italic">
+            Solicită un transfer înapoi la depozit sau către un stand care vinde acest produs.
+          </p>
+        </div>
+      )}
 
       {/* Acoperire stoc — afișat doar dacă există date suficiente */}
       {showCoverageChart && (
