@@ -39,7 +39,7 @@ The core of the system is a **weighted-sales-rate algorithm** that continuously 
 
 | View | Screenshot |
 |---|---|
-| **AI Suggestions** — generated restocking recommendations with urgency tags | ![Suggestions](docs/screenshots/suggestions.png) |
+| **Restock Suggestions** — generated restocking recommendations with urgency tags | ![Suggestions](docs/screenshots/suggestions.png) |
 | **Stock Movements** — full lifecycle workflow with status tracking | ![Movements](docs/screenshots/movements.png) |
 | **Network Map** — geographic stock distribution via Leaflet | ![Map](docs/screenshots/map.png) |
 | **Settings** — per-location algorithm tuning parameters | ![Settings](docs/screenshots/settings.png) |
