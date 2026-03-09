@@ -4,7 +4,7 @@
 
 # StockPilot
 
-**Multi-location inventory management with AI-powered restocking suggestions**
+**Multi-location inventory management with automated restocking recommendations**
 
 [![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -64,7 +64,7 @@ pending → awaiting_pickup → in_transit → completed
 - **Manual movements** — warehouse managers can create transfers and orders directly
 - Role-gated actions: warehouse managers approve, stand managers confirm pickup/delivery
 
-### 💡 AI Restocking Suggestions
+### 💡 Restocking Suggestions
 The algorithm runs on-demand and generates a fresh, deduplicated suggestion set:
 
 | Flow | Trigger | Action |
@@ -89,7 +89,7 @@ Every suggestion includes urgency tagging (`[CRITIC]` / `[URGENT]` / `[NORMAL]`)
 |---|:---:|:---:|:---:|
 | User management | ✅ | — | — |
 | Audit log | ✅ | — | — |
-| AI suggestions | ✅ | ✅ | — |
+| Restock Suggestions | ✅ | ✅ | — |
 | Approve movements | ✅ | ✅ | — |
 | Confirm pickup/delivery | — | — | ✅ |
 | View own stock/sales | ✅ | ✅ | ✅ |
