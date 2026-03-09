@@ -91,7 +91,7 @@ const navItems: NavItem[] = [
   },
   {
     to: '/suggestions',
-    label: 'Sugestii AI',
+    label: 'Sugestii automate',
     icon: <Lightbulb size={18} />,
     roles: ['admin', 'warehouse_manager'],
     end: true,
