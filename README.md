@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/StockPilot-📦-6d28d9?style=for-the-badge" alt="StockPilot" />
+<img src="docs/logo.png" alt="StockPilot" width="100" />
 
 # StockPilot
 
@@ -14,7 +14,7 @@
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS_4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Vite](https://img.shields.io/badge/Vite_7-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
 
-[Features](#-features) · [Architecture](#-architecture) · [Algorithm](#-restocking-algorithm) · [Getting Started](#-getting-started) · [API](#-api-reference) · [Team](#-team)
+[Features](#-features) · [Preview](#-preview) · [Architecture](#-architecture) · [Algorithm](#-restocking-algorithm) · [Getting Started](#-getting-started) · [API](#-api-reference) · [Team](#-team)
 
 </div>
 
@@ -25,6 +25,26 @@
 StockPilot is a full-stack inventory and sales management platform built for **multi-location retail networks** — warehouses and field stands. It gives warehouse managers and stand operators real-time stock visibility, intelligent restocking recommendations, and a complete audit trail through a clean, role-aware interface.
 
 The core of the system is a **weighted-sales-rate algorithm** that continuously analyzes stock levels, sales velocity, and transport costs across all locations to generate actionable, economically-sound transfer and reorder suggestions.
+
+---
+
+## 🖥 Preview
+
+<!-- Replace the path below with an actual screenshot of the main dashboard -->
+![Dashboard — admin overview with KPIs and sales charts](docs/screenshots/dashboard.png)
+
+<details>
+<summary>📸 More screenshots</summary>
+<br>
+
+| View | Screenshot |
+|---|---|
+| **AI Suggestions** — generated restocking recommendations with urgency tags | ![Suggestions](docs/screenshots/suggestions.png) |
+| **Stock Movements** — full lifecycle workflow with status tracking | ![Movements](docs/screenshots/movements.png) |
+| **Network Map** — geographic stock distribution via Leaflet | ![Map](docs/screenshots/map.png) |
+| **Settings** — per-location algorithm tuning parameters | ![Settings](docs/screenshots/settings.png) |
+
+</details>
 
 ---
 
@@ -98,19 +118,217 @@ stockpilot/
             └── audit.js       # Audit log helper
 ```
 
-### Database Schema (key tables)
+### Database Schema
+
+<details>
+<summary>📋 Key tables (click to expand)</summary>
+<br>
+
+| Table | Purpose |
+|---|---|
+| `locations` | Warehouses and stands (lat/lng, city, type) |
+| `products` | Product catalog (SKU, unit_price, weight_kg) |
+| `stock` | Current qty + safety_stock per location × product |
+| `sales` | Historical sales events with timestamps |
+| `stock_movements` | Full movement lifecycle with status transitions |
+| `reorder_suggestions` | Algorithm output with structured reason JSON |
+| `location_settings` | Per-location algorithm tuning parameters |
+| `transport_costs` | fixed_cost + cost_per_kg + lead_time per route |
+| `audit_logs` | Immutable action history |
+
+<details>
+<summary>🔎 Full SQL definitions</summary>
 
 ```sql
-locations        — warehouses and stands (lat/lng, city)
-products         — catalog (SKU, unit_price, weight_kg)
-stock            — current qty + safety_stock per location × product
-sales            — historical sales events
-stock_movements  — full movement lifecycle with status transitions
-reorder_suggestions — algorithm output with structured reason JSON
-location_settings — per-location algorithm tuning
-transport_costs  — fixed_cost + cost_per_kg + lead_time per route
-audit_logs       — immutable action history
+-- locations
+create table public.locations (
+  id serial not null,
+  name character varying(100) not null,
+  type character varying(20) not null,       -- 'warehouse' | 'stand'
+  city character varying(100) not null,
+  address character varying(255) null,
+  lat numeric(9, 6) null,
+  lng numeric(9, 6) null,
+  created_at timestamp without time zone null default now(),
+  constraint locations_pkey primary key (id),
+  constraint locations_type_check check (
+    (type)::text = any (array['warehouse', 'stand']::text[])
+  )
+);
+
+-- products
+create table public.products (
+  id serial not null,
+  name character varying(150) not null,
+  sku character varying(50) not null,
+  category character varying(100) null,
+  unit_price numeric(10, 2) not null,
+  weight_kg numeric(8, 3) null,
+  created_at timestamp without time zone null default now(),
+  constraint products_pkey primary key (id),
+  constraint products_sku_key unique (sku)
+);
+
+-- stock
+create table public.stock (
+  id serial not null,
+  location_id integer not null,
+  product_id integer not null,
+  quantity integer not null default 0,
+  safety_stock integer not null default 5,
+  updated_at timestamp without time zone null default now(),
+  constraint stock_pkey primary key (id),
+  constraint stock_location_id_product_id_key unique (location_id, product_id),
+  constraint stock_location_id_fkey foreign key (location_id) references locations (id),
+  constraint stock_product_id_fkey foreign key (product_id) references products (id)
+);
+
+-- sales
+create table public.sales (
+  id serial not null,
+  location_id integer not null,
+  product_id integer not null,
+  quantity integer not null,
+  sold_at timestamp without time zone null default now(),
+  constraint sales_pkey primary key (id),
+  constraint sales_location_id_fkey foreign key (location_id) references locations (id),
+  constraint sales_product_id_fkey foreign key (product_id) references products (id)
+);
+
+-- stock_movements
+create table public.stock_movements (
+  id serial not null,
+  product_id integer not null,
+  from_location_id integer null,
+  to_location_id integer not null,
+  quantity integer not null,
+  movement_type character varying(30) not null,  -- 'transfer' | 'supplier_order' | 'adjustment'
+  status character varying(20) null default 'pending',
+  transport_cost numeric(10, 2) null,
+  notes text null,
+  created_at timestamp without time zone null default now(),
+  completed_at timestamp without time zone null,
+  recommendation_reason text null,
+  recommended_lead_time integer null,
+  accepted_at timestamp without time zone null,
+  picked_up_at timestamp without time zone null,
+  constraint stock_movements_pkey primary key (id),
+  constraint stock_movements_from_location_id_fkey foreign key (from_location_id) references locations (id),
+  constraint stock_movements_product_id_fkey foreign key (product_id) references products (id),
+  constraint stock_movements_to_location_id_fkey foreign key (to_location_id) references locations (id),
+  constraint stock_movements_movement_type_check check (
+    (movement_type)::text = any (array['transfer', 'supplier_order', 'adjustment']::text[])
+  ),
+  constraint stock_movements_status_check check (
+    (status)::text = any (array['pending', 'awaiting_pickup', 'in_transit', 'completed', 'cancelled']::text[])
+  )
+);
+
+-- reorder_suggestions
+create table public.reorder_suggestions (
+  id serial not null,
+  product_id integer not null,
+  from_location_id integer null,
+  to_location_id integer not null,
+  suggested_qty integer not null,
+  reason text null,
+  estimated_cost numeric(10, 2) null,
+  status character varying(20) null default 'pending',  -- pending | approved | rejected | superseded
+  created_at timestamp without time zone null default now(),
+  updated_at timestamp without time zone null default now(),
+  constraint reorder_suggestions_pkey primary key (id),
+  constraint reorder_suggestions_from_location_id_fkey foreign key (from_location_id) references locations (id),
+  constraint reorder_suggestions_product_id_fkey foreign key (product_id) references products (id),
+  constraint reorder_suggestions_to_location_id_fkey foreign key (to_location_id) references locations (id),
+  constraint reorder_suggestions_status_check check (
+    (status)::text = any (array['pending', 'approved', 'rejected', 'superseded']::text[])
+  )
+);
+
+create trigger reorder_suggestions_updated_at
+  before update on reorder_suggestions
+  for each row execute function set_updated_at();
+
+-- location_settings
+create table public.location_settings (
+  id serial not null,
+  location_id integer not null,
+  lead_time_days integer not null default 2,
+  safety_stock_multiplier numeric(4, 2) not null default 1.0,
+  reorder_threshold_days integer not null default 7,
+  surplus_threshold_days integer not null default 45,
+  max_transfer_qty integer not null default 100,
+  auto_suggestions boolean not null default true,
+  notes text null,
+  updated_at timestamp without time zone null default now(),
+  updated_by character varying(100) null,
+  stale_days_threshold integer not null default 60,
+  storage_capacity integer not null default 9999,
+  min_transfer_qty integer not null default 5,
+  max_transport_cost_ratio numeric(4, 2) not null default 0.25,
+  constraint location_settings_pkey primary key (id),
+  constraint location_settings_location_id_key unique (location_id),
+  constraint location_settings_location_id_fkey foreign key (location_id) references locations (id) on delete cascade
+);
+
+-- transport_costs
+create table public.transport_costs (
+  id serial not null,
+  from_location_id integer not null,
+  to_location_id integer not null,
+  cost_per_kg numeric(8, 2) not null,
+  fixed_cost numeric(8, 2) not null,
+  lead_time_days integer not null,
+  constraint transport_costs_pkey primary key (id),
+  constraint transport_costs_from_location_id_to_location_id_key unique (from_location_id, to_location_id),
+  constraint transport_costs_from_location_id_fkey foreign key (from_location_id) references locations (id),
+  constraint transport_costs_to_location_id_fkey foreign key (to_location_id) references locations (id)
+);
+
+-- users
+create table public.users (
+  id serial not null,
+  name character varying(100) not null,
+  email character varying(150) not null,
+  password character varying(255) not null,
+  role character varying(50) not null,       -- 'admin' | 'warehouse_manager' | 'stand_manager'
+  location_id integer null,
+  created_at timestamp without time zone null default now(),
+  constraint users_pkey primary key (id),
+  constraint users_email_key unique (email),
+  constraint users_location_id_fkey foreign key (location_id) references locations (id) on delete set null,
+  constraint users_role_check check (
+    (role)::text = any (array['admin', 'warehouse_manager', 'stand_manager']::text[])
+  )
+);
+
+-- audit_logs
+create table public.audit_logs (
+  id serial not null,
+  user_id integer null,
+  user_name character varying(100) null,
+  user_email character varying(150) null,
+  user_role character varying(50) null,
+  action character varying(50) not null,
+  entity character varying(50) not null,
+  entity_id integer null,
+  description text not null,
+  metadata jsonb null,
+  ip_address character varying(45) null,
+  created_at timestamp without time zone null default now(),
+  constraint audit_logs_pkey primary key (id),
+  constraint audit_logs_user_id_fkey foreign key (user_id) references users (id) on delete set null
+);
+
+create index idx_audit_logs_created_at on public.audit_logs using btree (created_at desc);
+create index idx_audit_logs_user_id on public.audit_logs using btree (user_id);
+create index idx_audit_logs_entity on public.audit_logs using btree (entity);
+create index idx_audit_logs_action on public.audit_logs using btree (action);
 ```
+
+</details>
+
+</details>
 
 ---
 
@@ -151,7 +369,7 @@ cd stockpilot
 ```bash
 cd stockpilot-backend
 npm install
-cp .env.example .env
+cp .env.example .env   # .env.example is already in the repo
 ```
 
 ```env
@@ -187,15 +405,9 @@ cd stockpilot-frontend && npm run dev
 
 Open [http://localhost:5173](http://localhost:5173)
 
-### Database migrations
+### Database Setup
 
-Before first run, apply the required column additions:
-
-```sql
-ALTER TABLE public.location_settings
-  ADD COLUMN IF NOT EXISTS min_transfer_qty integer NOT NULL DEFAULT 5,
-  ADD COLUMN IF NOT EXISTS max_transport_cost_ratio numeric(4,2) NOT NULL DEFAULT 0.25;
-```
+The SQL schema and seed data live in [`stockpilot-backend/supabase_migrations/`](stockpilot-backend/supabase_migrations/).  
 
 ---
 

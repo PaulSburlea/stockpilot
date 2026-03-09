@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
 
   let query = supabase
     .from('stock')
-    .select('*, locations(name, city, type), products(name, sku, category)')
+    .select('*, locations(name, city, type), products(name, sku, category, unit_price)')
 
   if (location_id) query = query.eq('location_id', location_id)
   if (product_id)  query = query.eq('product_id', product_id)
@@ -31,7 +31,7 @@ router.get('/critical', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message })
 
-  const critical = data.filter(s => s.quantity <= s.safety_stock && s.quantity > 0)
+  const critical = data.filter(s => s.quantity <= s.safety_stock)
   res.json(critical)
 })
 

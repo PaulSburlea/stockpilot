@@ -59,9 +59,9 @@ router.get('/', async (req, res) => {
       const weightedAvg = (avg30 * 0.5) + (avg60 * 0.3) + (avg90 * 0.2)
       const dailyRate = Math.max(weightedAvg, 0.01) // minim 0.01 ca să nu împărțim la 0
 
-      const availableStock = stock.quantity - stock.safety_stock
-      const daysUntilStockout = availableStock > 0
-        ? Math.floor(availableStock / dailyRate)
+      // Zile până la epuizarea totală (stock = 0)
+      const daysUntilStockout = stock.quantity > 0
+        ? Math.floor(stock.quantity / dailyRate)
         : 0
 
       // Generează puncte de proiecție zilnică pentru 90 zile
